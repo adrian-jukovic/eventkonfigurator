@@ -262,19 +262,24 @@
   .lk-widget.lk-size-sm .lk-title{font-size:1.22rem !important;}
   .lk-widget.lk-size-sm .sub{font-size:.82rem !important;margin-bottom:22px !important;}
   .lk-widget.lk-size-sm .stage-box{padding:12px;}
+  /* Vorschaubox auf dem Handy etwas schmaler als der Bildschirm -- die SVG-Buehne skaliert dank
+     viewBox automatisch mit, alle Verhaeltnisse zueinander bleiben dabei exakt gleich. */
+  .lk-widget.lk-size-sm .stage-canvas{max-width:90%;margin:0 auto;}
   .lk-widget.lk-size-sm .cat-head{margin:24px 0 10px;gap:10px;}
   .lk-widget.lk-size-sm .cat-icon{width:34px;height:34px;}
   .lk-widget.lk-size-sm .cat-icon svg{width:19px;height:19px;}
   .lk-widget.lk-size-sm .cat-text h2{font-size:.96rem !important;}
   .lk-widget.lk-size-sm .cat-text p{font-size:.74rem !important;}
-  .lk-widget.lk-size-sm .item{padding:9px 11px;gap:8px;margin-bottom:7px;}
-  .lk-widget.lk-size-sm .item-thumb{width:36px;height:36px;}
-  .lk-widget.lk-size-sm .item-info h3{font-size:.86rem !important;}
-  .lk-widget.lk-size-sm .item-info span{font-size:.7rem !important;}
-  .lk-widget.lk-size-sm .max-note{font-size:.62rem !important;}
+  /* Artikelzeilen kompakter, damit mehr auf einen Blick sichtbar ist -- Plus/Minus-Buttons dagegen
+     bewusst GROESSER als im normalen Stepper, damit sie sich auf dem Handy leicht treffen lassen. */
+  .lk-widget.lk-size-sm .item{padding:7px 10px;gap:8px;margin-bottom:6px;}
+  .lk-widget.lk-size-sm .item-thumb{width:32px;height:32px;}
+  .lk-widget.lk-size-sm .item-info h3{font-size:.84rem !important;}
+  .lk-widget.lk-size-sm .item-info span{font-size:.68rem !important;}
+  .lk-widget.lk-size-sm .max-note{font-size:.6rem !important;}
   .lk-widget.lk-size-sm .stepper{gap:8px;}
-  .lk-widget.lk-size-sm .stepper button{width:28px;height:28px;font-size:.95rem;}
-  .lk-widget.lk-size-sm .stepper .count{font-size:.98rem !important;min-width:26px;}
+  .lk-widget.lk-size-sm .stepper button{width:40px;height:40px;font-size:1.2rem;}
+  .lk-widget.lk-size-sm .stepper .count{font-size:1rem !important;min-width:24px;}
   .lk-widget.lk-size-sm .summary{padding:16px;}
   .lk-widget.lk-size-sm #summaryRows{font-size:.82rem !important;}
   .lk-widget.lk-size-sm .summary-total b{font-size:1.3rem !important;}
@@ -1209,34 +1214,33 @@
     renderSummary();
   }
 
-  // Verschiebt Parstrahler manuell zwischen Traverse und Ambientebeleuchtung. Reine Verschiebung
-  // (kein Hinzufuegen/Entfernen von Geraeten), daher hier kein Aufleucht-/Ausblend-Effekt.
+  // Verschiebt Parstrahler manuell zwischen Traverse und Ambientebeleuchtung — immer im gleichen
+  // 2er-Schritt wie der normale Parstrahler-Stepper.
   function changeAmbientManual(dir){
     const parItem = allItems.find(i => i.id === 'a');
+    const step = STEP.a;
     if(dir < 0){
-      const next = state.aAmbientManual - 1;
-      if(next < 0) return;
-      state.aAmbientManual = next;
+      if(state.aAmbientManual <= 0) return;
+      state.aAmbientManual = Math.max(0, state.aAmbientManual - step);
       flashAllowed = false; // reine Verschiebung zurueck zur Traverse, kein echtes Entfernen
-      document.getElementById('ambientManualCount').textContent = next;
+      document.getElementById('ambientManualCount').textContent = state.aAmbientManual;
       renderStage();
       return;
     }
-    // "+": Wenn noch Kapazitaet frei ist (Parstrahler, die schon gewaehlt aber noch nicht manuell
-    // in die Ambientebeleuchtung verschoben sind), einfach einen davon verschieben. Ist bereits alles
-    // verschoben, wird automatisch ein neuer Parstrahler dazugewaehlt — im selben Schrittmass wie der
-    // normale Stepper (2er-Paar bzw. je nach Situation 1er), damit die Parstrahler-Anzahl nie ungerade
-    // bzw. unsymmetrisch wird.
-    if(state.aAmbientManual < state.a){
-      state.aAmbientManual++;
-      flashAllowed = false;
-    } else {
-      const step = stepFor('a', 1);
-      const nextA = state.a + step;
-      if(nextA > parItem.max) return;
-      state.a = nextA;
-      state.aAmbientManual += step;
+    // "+": Bereits auf der Traverse sitzende Parstrahler bleiben zunaechst unangetastet — stattdessen
+    // werden zuerst NEUE Parstrahler aus der Artikelauswahl dazugewaehlt und direkt als
+    // Ambientebeleuchtung markiert (bis alle 16 verbaucht sind). Erst wenn das Maximum erreicht ist,
+    // wandern weitere Klicks tatsaechlich von der Traverse in die Ambientebeleuchtung.
+    if(state.a < parItem.max){
+      const add = Math.min(step, parItem.max - state.a);
+      state.a += add;
+      state.aAmbientManual += add;
       flashAllowed = true; // es kommt wirklich (mindestens) ein neuer Parstrahler dazu
+    } else {
+      const move = Math.min(step, state.a - state.aAmbientManual);
+      if(move <= 0) return;
+      state.aAmbientManual += move;
+      flashAllowed = false;
     }
     document.getElementById('ambientManualCount').textContent = state.aAmbientManual;
     renderCategories();
@@ -1555,7 +1559,7 @@
     }
     if(remainingA > 0){
       extraHtml += `<span class="stage-mini-label">${remainingA}x Parstrahler (z.B. Ambientebeleuchtung)</span>`;
-      const parNormalSize = { w: 26, h: Math.round(26 / RATIO.strahlerAngled) };
+      const parNormalSize = { w: 20, h: Math.round(20 / RATIO.strahlerAngled) };
       extraHtml += `<div class="extra-list-row">${tileStack(photos.strahlerAngled, 'Parstrahler', parNormalSize, remainingA, 999, 0, remainingA - prevExtra.extraA)}</div>`;
     }
     if(remainingD > 0){
@@ -1679,9 +1683,21 @@
 
     // Waehrend natives sticky laeuft: nur beobachten (kein transform, keine Layout-Aenderung pro Frame,
     // dadurch bleibt die Schrift beim Scrollen gestochen scharf).
+    // Auf dem Handy blendet der Browser beim Scrollen kurz die Adressleiste ein/aus, wodurch sich die
+    // Viewport-Hoehe fuer ein paar Frames veraendert -- das liess stickyWorks() faelschlich "kaputt"
+    // erscheinen und schaltete unnoetig in den ruckelanfaelligen JS-Modus. Deshalb erst nach mehreren
+    // AUFEINANDERFOLGENDEN Fehlschlaegen wirklich umschalten; einzelne kurze Aussetzer werden ignoriert.
+    var stickyFailStreak = 0;
+    var STICKY_FAIL_THRESHOLD = 10;
     function watch(){
       if(jsMode) return;
-      if(!stickyWorks()){ enableJsMode(); return; }
+      if(!stickyWorks()){
+        stickyFailStreak++;
+        if(stickyFailStreak >= STICKY_FAIL_THRESHOLD){ enableJsMode(); return; }
+        requestAnimationFrame(watch);
+        return;
+      }
+      stickyFailStreak = 0;
       var r = box.getBoundingClientRect();
       box.classList.toggle('is-stuck', r.top <= GAP + 1);
       requestAnimationFrame(watch);
