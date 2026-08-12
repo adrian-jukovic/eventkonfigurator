@@ -857,24 +857,15 @@
     if(hasMovingHead){
       const mhK = MH_DEPTH_SCALE[slot] * 0.92;   // insgesamt etwas kleiner
       const mh = { w: SIZE.movingHead.w * mhK, h: SIZE.movingHead.h * mhK };
-      // Auf der 0,5m-Traverse sitzt der Kopf sonst mittig -- kollidiert dann mit dem Strobo, der dort
-      // immer aussen haengt (siehe unten). Weicht in dem Fall Richtung Buehnenmitte (innen) aus.
-      const hasStrobeHere = filledPositions.length > 0;
-      const headShift = (len === 0.5 && hasStrobeHere) ? (side === 'left' ? 6 * mhK : -6 * mhK) : 0;
-      // Um 90 Grad gedreht: die Aufhaengungs-Nippel zeigen dadurch nach oben/unten statt seitlich
-      // heraus und kollidieren nicht mehr mit Strobo/Strahler direkt daneben.
-      out += svgImg(`head:${poleKey}`, photos.movingHead, 'Moving Head', slotX - mh.w / 2 + headShift, trussY - mh.h + 6 * mhK, mh.w, mh.h, 90, null, false, side === 'right');  // weniger tief in der Traverse (14 -> 6); rechte Seite gespiegelt, damit der Kopf zur Buehnenmitte zeigt
+      out += svgImg(`head:${poleKey}`, photos.movingHead, 'Moving Head', slotX - mh.w / 2, trussY - mh.h + 6 * mhK, mh.w, mh.h, 0, null, false, side === 'right');  // weniger tief in der Traverse (14 -> 6); rechte Seite gespiegelt, damit der Kopf zur Buehnenmitte zeigt
     }
 
     // Strobes: immer auf der AUSSENSEITE der Traverse (Richtung Boxen, weg von der Bühnenmitte) —
-    // spiegelbildlich je Seite, komplett innerhalb der eigenen Traversenbreite. Bei mehreren
-    // uebereinander (top/middle/bottom) leicht versetzt statt exakt gestapelt, wie am echten Rig.
-    const STROBE_ZIGZAG_PX = { top: 5, middle: -5, bottom: 5, only: 0 };
+    // spiegelbildlich je Seite, komplett innerhalb der eigenen Traversenbreite.
     filledPositions.forEach(pos => {
       const s = { w: SIZE.strobeSmall.w * k, h: SIZE.strobeSmall.h * k };
       const sY = trussY + (STROBE_POS_PCT[pos] / 100) * truss.h - s.h / 2;
-      const zig = (STROBE_ZIGZAG_PX[pos] || 0) * k * (side === 'left' ? 1 : -1);
-      const sX = (side === 'left' ? trussX - s.w / 3 - k * 0.15 : trussX + truss.w - s.w * 2 / 3 + k * 0.15) + zig;  // etwas nach innen zurueckgenommen
+      const sX = side === 'left' ? trussX - s.w / 3 - k * 0.15 : trussX + truss.w - s.w * 2 / 3 + k * 0.15;  // etwas nach innen zurueckgenommen
       out += svgImg(`strobe:${poleKey}:${pos}`, photos.strobe, 'Strobe', sX, sY, s.w, s.h);
     });
 
