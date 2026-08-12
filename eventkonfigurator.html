@@ -832,7 +832,10 @@
     1.5: commonSlots(1.5).concat([
       // Moving Wall Washer, Innenseite Richtung DJ-Pult (seitenweise leicht unterschiedlich
       // nachjustiert, da die Traverse im Foto minimal schraeg steht).
-      { id: 'wallwasher', device: 'wallwasher', anchor: 'inner', yPct: 50, offW: 0.5, off: 0.25, dxInBySide: { left: 2, right: 5 } },
+      // Frueher seitenweise unterschiedlich nachjustiert (links 2 / rechts 5) — das ergab einen
+      // sichtbaren Versatz von 3px zwischen linker und rechter Seite. Jetzt beidseitig gleich,
+      // damit die Anordnung exakt spiegelbildlich ist.
+      { id: 'wallwasher', device: 'wallwasher', anchor: 'inner', yPct: 50, offW: 0.5, off: 0.25, dxIn: 3.5 },
     ]),
   };
 
