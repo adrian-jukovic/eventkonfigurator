@@ -365,6 +365,7 @@
         <button type="button" class="stage-tool-btn" onclick="regularizePlan()">Vermitteln</button>
         <button type="button" class="stage-tool-btn" onclick="copyPlan()">Zum Kopieren</button>
         <button type="button" class="stage-tool-btn" onclick="importPlan()">Einfügen</button>
+        <button type="button" class="stage-tool-btn" onclick="restorePlanDefault()">Fest hinterlegten Plan laden</button>
         <button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="clearPlanDevice()">Dieses Gerät leeren</button>
       </div>
     </div>
@@ -1614,11 +1615,43 @@
   let planMode = false;
   let planDevice = 'strahlerFront';     // welches Geraet gerade gesetzt wird
   let planDeleteMode = false;
-  let MOUNT_PLAN = {};                  // { "1": { strahlerFront: [{xRel,yPct}], ... } }
+  // ---- Fest hinterlegter Montageplan ----
+  // Von Adrian im Montage-Plan gesetzt (alle Stellen, an denen das jeweilige Geraet in echt haengen
+  // kann) und anschliessend "vermittelt" (gleiche Abstaende, saubere Spalten).
+  // Positionen gelten je Turm; die Gegenseite entsteht automatisch spiegelbildlich.
+  const MOUNT_PLAN_DEFAULT = {
+    "0.5": {
+      strahlerAngled: [{ xRel: 0.1, yPct: 77.8 }],
+      strahlerFront:  [{ xRel: -11.6, yPct: 56.4 }, { xRel: 12.7, yPct: 56.4 }],
+      strobe:         [{ xRel: -11.6, yPct: 56.4 }, { xRel: 13.5, yPct: 56.4 }],
+    },
+    "1": {
+      strahlerAngled: [{ xRel: 0.6, yPct: 88.8 }],
+      strahlerFront:  [{ xRel: -11.6, yPct: 82.8 }, { xRel: 13.1, yPct: 62.7 },
+                       { xRel: -11.6, yPct: 42.5 }, { xRel: 13.1, yPct: 22.4 }],
+      strobe:         [{ xRel: -11.6, yPct: 72.4 }, { xRel: 12.8, yPct: 72.4 },
+                       { xRel: -11.6, yPct: 31.0 }, { xRel: 12.8, yPct: 31.0 }],
+    },
+    "1.5": {
+      strahlerAngled: [{ xRel: -0.7, yPct: 92.6 }],
+      strahlerFront:  [{ xRel: -13.7, yPct: 87.1 }, { xRel: 13.9, yPct: 72.4 },
+                       { xRel: -13.7, yPct: 57.7 }, { xRel: 13.9, yPct: 43.1 },
+                       { xRel: -13.7, yPct: 28.4 }, { xRel: 13.9, yPct: 13.7 }],
+      strobe:         [{ xRel: -13.0, yPct: 82.6 }, { xRel: 12.6, yPct: 82.6 },
+                       { xRel: -13.0, yPct: 53.1 }, { xRel: 12.6, yPct: 53.1 },
+                       { xRel: -13.0, yPct: 23.6 }, { xRel: 12.6, yPct: 23.6 }],
+      wallwasher:     [{ xRel: -13.2, yPct: 51.1 }, { xRel: 12.6, yPct: 51.1 }],
+    },
+  };
+  let MOUNT_PLAN = JSON.parse(JSON.stringify(MOUNT_PLAN_DEFAULT));
   try {
     const savedP = localStorage.getItem('lkMountPlan');
-    if(savedP) MOUNT_PLAN = JSON.parse(savedP) || {};
-  } catch(e){ MOUNT_PLAN = {}; }
+    if(savedP){
+      const parsed = JSON.parse(savedP);
+      // Nur uebernehmen, wenn wirklich etwas drin steht — sonst gilt der feste Plan
+      if(parsed && Object.keys(parsed).some(l => Object.keys(parsed[l] || {}).length)) MOUNT_PLAN = parsed;
+    }
+  } catch(e){}
   function saveMountPlan(){
     try { localStorage.setItem('lkMountPlan', JSON.stringify(MOUNT_PLAN)); } catch(e){}
   }
@@ -1771,6 +1804,12 @@
         MOUNT_PLAN[len][dev] = regularizePlanList(MOUNT_PLAN[len][dev]);
       });
     });
+    saveMountPlan(); renderMountPlan(); updatePlanPanel();
+  }
+
+  // Holt den fest im Code hinterlegten Montageplan zurueck (falls im Browser etwas verloren ging).
+  function restorePlanDefault(){
+    MOUNT_PLAN = JSON.parse(JSON.stringify(MOUNT_PLAN_DEFAULT));
     saveMountPlan(); renderMountPlan(); updatePlanPanel();
   }
 
