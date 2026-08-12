@@ -166,6 +166,18 @@
   .lk-widget svg.lk-slot-edit{ touch-action:none; cursor:grab; }
   .lk-widget svg.lk-slot-edit g[data-regkey]{ cursor:grab; }
   .lk-widget svg.lk-slot-edit g[data-regkey]:hover{ outline:1px dashed var(--orange); }
+  /* Zeile je eigenem Montagepunkt: Name, drei Geraete-Schalter, Loeschen */
+  .lk-widget .slot-row{
+    display:flex; align-items:center; gap:5px; flex-wrap:wrap;
+    padding:5px 0; border-top:1px solid rgba(255,255,255,.1);
+  }
+  .lk-widget .slot-row:first-child{ border-top:none; }
+  .lk-widget .slot-row-name{
+    font-family:Consolas, monospace; font-size:.68rem !important;
+    color:var(--white-ish) !important; min-width:62px;
+  }
+  .lk-widget .slot-allow{ padding:3px 8px; font-size:.64rem !important; opacity:.45; }
+  .lk-widget .slot-allow.is-active{ opacity:1; }
   .lk-widget .extra-list{margin-top:10px;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:64px;}
   .lk-widget .extra-list-row{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;}
 
@@ -1626,10 +1638,26 @@
       yPct: +(((p.y - tr.rect.y) / tr.rect.h) * 100).toFixed(1),
       offW: 0,
       off: +(((p.x - edge) * inward) / k).toFixed(1),
+      // Welche Geraete an diesem Punkt haengen duerfen. Standard: alle drei — ueber die Schalter
+      // im Panel abwaehlbar, weil z.B. ein breiter Parstrahler nicht ueberall passt, wo ein
+      // schmaler Strobo noch hingeht.
+      allows: ['strahler', 'strobe', 'wallwasher'],
     });
     saveCustomSlots();
     prevRegistry = {}; flashAllowed = false;
     renderStage();
+    updateSlotEditPanel();
+  }
+
+  // Schaltet an einem eigenen Montagepunkt um, ob dort ein bestimmtes Geraet haengen darf.
+  const DEVICE_LABEL = { strahler: 'Strahler', strobe: 'Strobo', wallwasher: 'Wall Washer' };
+  function toggleSlotAllows(len, id, dev){
+    const sl = (CUSTOM_SLOTS[len] || []).find(s => s.id === id);
+    if(!sl) return;
+    sl.allows = sl.allows || ['strahler', 'strobe', 'wallwasher'];
+    const i = sl.allows.indexOf(dev);
+    if(i >= 0) sl.allows.splice(i, 1); else sl.allows.push(dev);
+    saveCustomSlots();
     updateSlotEditPanel();
   }
 
@@ -1747,13 +1775,19 @@
     out.textContent = txt.trim() ||
       'Im Editor sind alle Montagepunkte als Punkte sichtbar: orange = fest hinterlegt, grün = selbst angelegt.\nLichter oder Punkte antippen und ziehen. Über „Platz hinzufügen“ legst Du neue an.';
 
-    // --- Löschknöpfe für eigene Punkte ---
+    // --- Pro eigenem Punkt: welche Geräte dürfen dort hängen + Löschen ---
     const del = document.getElementById('slotDeleteList');
     if(del){
       del.innerHTML = customLens.length
-        ? customLens.sort().map(l => (CUSTOM_SLOTS[l] || []).map(s =>
-            `<button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="deleteCustomSlot('${l}','${s.id}')">✕ ${l}m ${s.id}</button>`
-          ).join('')).join('')
+        ? customLens.sort().map(l => (CUSTOM_SLOTS[l] || []).map(s => {
+            const allows = s.allows || ['strahler', 'strobe', 'wallwasher'];
+            const toggles = Object.keys(DEVICE_LABEL).map(dev =>
+              `<button type="button" class="stage-tool-btn slot-allow${allows.indexOf(dev) >= 0 ? ' is-active' : ''}"
+                 onclick="toggleSlotAllows('${l}','${s.id}','${dev}')">${DEVICE_LABEL[dev]}</button>`
+            ).join('');
+            return `<div class="slot-row"><span class="slot-row-name">${l}m · ${s.id}</span>${toggles}` +
+                   `<button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="deleteCustomSlot('${l}','${s.id}')">✕</button></div>`;
+          }).join('')).join('')
         : '';
     }
   }
