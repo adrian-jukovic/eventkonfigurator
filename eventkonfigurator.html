@@ -344,10 +344,12 @@
       <button type="button" class="stage-tool-btn stage-tool-btn--danger" id="resetAllBtn" onclick="resetAllSelections()">Alles zurücksetzen</button>
     </div>
     <div class="slot-edit-panel" id="slotEditPanel" style="display:none">
-      <p class="slot-edit-hint">Licht antippen und ziehen — die Gegenseite bewegt sich automatisch spiegelbildlich mit. Grob hinschieben genügt: „Abstände angleichen“ setzt danach exakt gleiche Abstände.</p>
+      <p class="slot-edit-hint">Licht antippen und ziehen — die Gegenseite bewegt sich automatisch spiegelbildlich mit. <b>Höhen angleichen</b> macht nur die Abstände nach oben gleich und lässt die seitliche Lage in Ruhe (für Treppen-Anordnungen). <b>Seitlich ausrichten</b> stellt Lichter derselben Seite in eine Flucht.</p>
       <pre class="slot-edit-out" id="slotEditOut"></pre>
       <div class="stage-tools">
-        <button type="button" class="stage-tool-btn" onclick="equalizeSlotSpacing()">Abstände angleichen</button>
+        <button type="button" class="stage-tool-btn" onclick="equalizeHeights()">Höhen angleichen</button>
+        <button type="button" class="stage-tool-btn" onclick="alignSideways()">Seitlich ausrichten</button>
+        <button type="button" class="stage-tool-btn" onclick="undoSlotChange()">Rückgängig</button>
         <button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="resetSlotOverrides()">Korrekturen verwerfen</button>
       </div>
     </div>
@@ -1403,11 +1405,29 @@
     SLOT_OVERRIDES[key] = { dxIn: ov.dxIn || 0, dy: Math.round(neededDy) };
   }
 
-  // Gleicht die Abstaende innerhalb aller Gruppen an:
-  //  - senkrecht: gleiche Abstaende zwischen allen Plaetzen (oberster/unterster bleiben stehen)
-  //  - waagerecht: Plaetze an derselben Kante (innen bzw. aussen) bekommen denselben seitlichen Versatz
-  // Links/rechts ist ohnehin immer spiegelbildlich, das ergibt sich aus dem Katalog selbst.
-  function equalizeSlotSpacing(){
+  // Letzter Stand vor einem Angleichen — damit ein Fehlgriff nicht die ganze Handarbeit zerstoert.
+  let slotUndoSnapshot = null;
+  function snapshotSlots(){ slotUndoSnapshot = JSON.parse(JSON.stringify(SLOT_OVERRIDES)); }
+  function undoSlotChange(){
+    if(!slotUndoSnapshot) return;
+    SLOT_OVERRIDES = slotUndoSnapshot;
+    slotUndoSnapshot = null;
+    applyAfterEqualize();
+  }
+
+  function applyAfterEqualize(){
+    saveSlotOverrides();
+    prevRegistry = {};
+    flashAllowed = false;
+    renderStage();
+    updateSlotEditPanel();
+  }
+
+  // "Höhen angleichen": NUR die senkrechten Abstaende vereinheitlichen. Die seitliche Lage jedes
+  // Lichts bleibt exakt so, wie sie hingeschoben wurde — der Aufbau (z.B. eine Treppe) bleibt also
+  // erhalten, nur die Hoehenabstaende werden gleich. Oberstes und unterstes Licht bleiben stehen.
+  function equalizeHeights(){
+    snapshotSlots();
     Object.keys(SLOT_GROUPS).forEach(gk => {
       const grp = SLOT_GROUPS[gk];
       const entries = grp.ids
@@ -1415,13 +1435,21 @@
         .filter(e => e.pct != null)
         .sort((a, b) => a.pct - b.pct);
       if(entries.length < 2) return;
-
-      // --- senkrecht gleichmaessig verteilen ---
       const first = entries[0].pct, last = entries[entries.length - 1].pct;
       const stepPct = (last - first) / (entries.length - 1);
       entries.forEach((e, i) => setYPct(grp.len, e.id, first + i * stepPct));
+    });
+    applyAfterEqualize();
+  }
 
-      // --- waagerecht je Kante angleichen (Mittelwert der Gruppe) ---
+  // "Seitlich ausrichten": Lichter, die an derselben Kante haengen (alle "aussen" bzw. alle "innen"),
+  // bekommen exakt denselben seitlichen Versatz — sie stehen dann sauber in einer Flucht.
+  // ACHTUNG: Bei einer Treppe, in der jedes Licht bewusst eine eigene seitliche Position hat, ist das
+  // NICHT gewuenscht — dann nur "Höhen angleichen" benutzen.
+  function alignSideways(){
+    snapshotSlots();
+    Object.keys(SLOT_GROUPS).forEach(gk => {
+      const grp = SLOT_GROUPS[gk];
       const byAnchor = {};
       grp.ids.forEach(id => {
         const sl = findSlot(grp.len, id);
@@ -1439,11 +1467,7 @@
         });
       });
     });
-    saveSlotOverrides();
-    prevRegistry = {};
-    flashAllowed = false;
-    renderStage();
-    updateSlotEditPanel();
+    applyAfterEqualize();
   }
 
   function saveSlotOverrides(){
