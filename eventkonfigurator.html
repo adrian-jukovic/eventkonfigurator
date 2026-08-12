@@ -344,9 +344,10 @@
       <button type="button" class="stage-tool-btn stage-tool-btn--danger" id="resetAllBtn" onclick="resetAllSelections()">Alles zurücksetzen</button>
     </div>
     <div class="slot-edit-panel" id="slotEditPanel" style="display:none">
-      <p class="slot-edit-hint">Licht antippen und ziehen — die Gegenseite bewegt sich automatisch spiegelbildlich mit. Traversen und Moving Heads lassen sich nicht verschieben.</p>
+      <p class="slot-edit-hint">Licht antippen und ziehen — die Gegenseite bewegt sich automatisch spiegelbildlich mit. Seitlich stufenlos, nach oben/unten im 5er-Raster. Grob hinschieben genügt: „Abstände angleichen“ setzt danach exakt gleiche Abstände.</p>
       <pre class="slot-edit-out" id="slotEditOut"></pre>
       <div class="stage-tools">
+        <button type="button" class="stage-tool-btn" onclick="equalizeSlotSpacing()">Abstände angleichen</button>
         <button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="resetSlotOverrides()">Korrekturen verwerfen</button>
       </div>
     </div>
@@ -1374,6 +1375,78 @@
   // ============================================================================
   let slotEditorOn = false;
   let slotEditorDragging = false;
+  const SNAP_Y = 5;   // Rasterweite beim Ziehen nach oben/unten (links/rechts bleibt stufenlos)
+
+  // Gruppen von Plaetzen, die untereinander gleichmaessig verteilt sein sollen. "Abstaende angleichen"
+  // arbeitet immer auf einer solchen Gruppe: oberster und unterster Platz bleiben, wo sie sind, alle
+  // dazwischen werden auf exakt gleiche Abstaende gesetzt.
+  const SLOT_GROUPS = {
+    '1|par1m': { len: 1.0, ids: PAR_1M_ORDER },
+    '1|par1mInner': { len: 1.0, ids: PAR_1M_ORDER_INNER_ONLY },
+  };
+
+  // Rechnet die tatsaechliche Hoehe eines Platzes (Katalog + Korrektur) in Prozent der Traversenhoehe.
+  function effectiveYPct(len, id){
+    const sl = findSlot(len, id);
+    if(!sl) return null;
+    const ov = SLOT_OVERRIDES[len + '|' + id] || {};
+    const trussH = TRUSS_SIZE[len].h;
+    return (sl.yPct != null ? sl.yPct : 50) + (((sl.dy || 0) + (ov.dy || 0)) / trussH) * 100;
+  }
+
+  // Setzt die Korrektur so, dass ein Platz exakt auf der gewuenschten Prozent-Hoehe landet.
+  function setYPct(len, id, targetPct){
+    const sl = findSlot(len, id);
+    if(!sl) return;
+    const key = len + '|' + id;
+    const trussH = TRUSS_SIZE[len].h;
+    const neededDy = ((targetPct - (sl.yPct != null ? sl.yPct : 50)) / 100) * trussH - (sl.dy || 0);
+    const ov = SLOT_OVERRIDES[key] || { dxIn: 0, dy: 0 };
+    SLOT_OVERRIDES[key] = { dxIn: ov.dxIn || 0, dy: Math.round(neededDy) };
+  }
+
+  // Gleicht die Abstaende innerhalb aller Gruppen an:
+  //  - senkrecht: gleiche Abstaende zwischen allen Plaetzen (oberster/unterster bleiben stehen)
+  //  - waagerecht: Plaetze an derselben Kante (innen bzw. aussen) bekommen denselben seitlichen Versatz
+  // Links/rechts ist ohnehin immer spiegelbildlich, das ergibt sich aus dem Katalog selbst.
+  function equalizeSlotSpacing(){
+    Object.keys(SLOT_GROUPS).forEach(gk => {
+      const grp = SLOT_GROUPS[gk];
+      const entries = grp.ids
+        .map(id => ({ id, pct: effectiveYPct(grp.len, id) }))
+        .filter(e => e.pct != null)
+        .sort((a, b) => a.pct - b.pct);
+      if(entries.length < 2) return;
+
+      // --- senkrecht gleichmaessig verteilen ---
+      const first = entries[0].pct, last = entries[entries.length - 1].pct;
+      const stepPct = (last - first) / (entries.length - 1);
+      entries.forEach((e, i) => setYPct(grp.len, e.id, first + i * stepPct));
+
+      // --- waagerecht je Kante angleichen (Mittelwert der Gruppe) ---
+      const byAnchor = {};
+      grp.ids.forEach(id => {
+        const sl = findSlot(grp.len, id);
+        if(!sl) return;
+        const ov = SLOT_OVERRIDES[grp.len + '|' + id] || {};
+        (byAnchor[sl.anchor] = byAnchor[sl.anchor] || []).push({ id, dxIn: ov.dxIn || 0 });
+      });
+      Object.keys(byAnchor).forEach(anchor => {
+        const list = byAnchor[anchor];
+        const avg = Math.round(list.reduce((s, e) => s + e.dxIn, 0) / list.length);
+        list.forEach(e => {
+          const key = grp.len + '|' + e.id;
+          const ov = SLOT_OVERRIDES[key] || { dxIn: 0, dy: 0 };
+          SLOT_OVERRIDES[key] = { dxIn: avg, dy: ov.dy || 0 };
+        });
+      });
+    });
+    saveSlotOverrides();
+    prevRegistry = {};
+    flashAllowed = false;
+    renderStage();
+    updateSlotEditPanel();
+  }
 
   function saveSlotOverrides(){
     try { localStorage.setItem('lkSlotOverrides', JSON.stringify(SLOT_OVERRIDES)); } catch(e){}
@@ -1426,8 +1499,10 @@
     evt.preventDefault();
     // dxIn zaehlt Richtung Buehnenmitte — auf der rechten Seite ist das die andere Bildrichtung.
     const towardCenter = dragState.meta.side === 'left' ? 1 : -1;
+    // Links/rechts stufenlos, hoch/runter rastet im 5er-Raster ein: so lassen sich gleiche
+    // Hoehenabstaende schon per Finger treffen, ohne die seitliche Feinjustierung einzuschraenken.
     const dxIn = Math.round(dragState.baseDxIn + (p.x - dragState.startX) * towardCenter);
-    const dy = Math.round(dragState.baseDy + (p.y - dragState.startY));
+    const dy = Math.round((dragState.baseDy + (p.y - dragState.startY)) / SNAP_Y) * SNAP_Y;
     SLOT_OVERRIDES[dragState.key] = { dxIn, dy };
     if(dragFrame) return;                       // hoechstens ein Neuzeichnen pro Bildschirm-Frame
     dragFrame = requestAnimationFrame(() => {
