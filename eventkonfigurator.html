@@ -1,0 +1,1736 @@
+<style>
+  .lk-widget{
+    --night:#0c1424; --orange:#ff8a3d; --orange-deep:#e8722a;
+    --white-ish:#f5f3ee; --muted:#a9b0c0; --card:#121b30; --border:rgba(255,255,255,.1);
+  }
+  .lk-widget, .lk-widget *{box-sizing:border-box;}
+  .lk-widget{
+    margin:0; font-family:'Segoe UI',Arial,sans-serif !important; background:var(--night); color:var(--white-ish) !important;
+    padding:32px 16px; border-radius:18px;
+  }
+  .lk-widget .wrap{max-width:880px;margin:0 auto;}
+  .lk-widget .lk-title{font-size:1.6rem !important;line-height:1.2 !important;margin:0 0 6px !important;font-weight:700 !important;color:var(--white-ish) !important;}
+  .lk-widget .sub{color:var(--muted) !important;font-size:.95rem !important;margin:0 0 30px !important;}
+
+  /* IONOS-Wrapper um das HTML-Modul: 'clip' statt 'hidden' bzw. 'visible'.
+     - 'hidden' (Baukasten-Standard) macht das Element zum Scroll-Container -> position:sticky wird
+       wirkungslos, die Vorschaubox muesste per JS nachgezogen werden und zittert dabei beim Scrollen.
+     - 'visible' laesst dagegen seitlich Inhalt ueberlaufen -> auf dem Handy verrutscht die Seite.
+     'overflow-x: clip' schneidet seitlich sauber ab, OHNE einen Scroll-Container zu erzeugen —
+     damit bleibt sticky (und das ruckelfreie Scrollen) auf allen Geraeten erhalten. */
+  .html-code-module-root{ overflow-x:clip !important; overflow-y:visible !important; }
+
+  /* Horizontalen Ueberlauf der gesamten Seite unterbinden. Ursache des seitlichen Versatzes auf dem
+     Handy: Irgendein Element der Seite ist breiter als der Bildschirm, dadurch entsteht ein
+     horizontaler Scrollbereich — die Seite steht dann nicht mehr mittig und rechts bleibt ein
+     heller Streifen. 'clip' schneidet ab, ohne einen Scroll-Container zu erzeugen (wichtig, damit
+     position:sticky der Vorschaubox weiter funktioniert). */
+  html, body{ max-width:100% !important; overflow-x:clip !important; }
+
+  /* Sicherheitsnetz: das Widget darf nie breiter werden als der verfuegbare Platz */
+  .lk-widget{ max-width:100%; overflow-x:clip; }
+
+  /* Vorschaubox: bevorzugt natives position:sticky — das erledigt der Browser direkt beim Scrollen
+     (Compositor), wodurch Schrift und Grafik gestochen scharf bleiben. Das JS-gesteuerte Mitschieben
+     per transform (Klasse .lk-js-follow, siehe unten) erzeugt dagegen zwangslaeufig ein leichtes
+     Doppelbild/Ghosting: der Browser scrollt die Seite bereits, das Skript zieht die Box erst einen
+     Frame spaeter nach. Das JS-Verfahren wird deshalb nur noch als Rueckfall genutzt, falls die
+     Seite (z.B. durch einen Scroll-Container der Baukasten-Vorlage) natives sticky ausser Kraft setzt. */
+  .lk-widget .stage-box{
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:18px; margin-bottom:30px;
+    position:sticky; top:12px; z-index:30;
+    transition:box-shadow .2s ease;
+  }
+  /* Rueckfall-Modus: nur aktiv, wenn natives sticky nachweislich nicht greift */
+  .lk-widget .stage-box.lk-js-follow{
+    position:relative; top:auto;
+    will-change:transform;
+    transform:translate3d(0,0,0);
+    backface-visibility:hidden; -webkit-backface-visibility:hidden;
+  }
+  .lk-widget .stage-box.is-stuck{ box-shadow:0 18px 40px rgba(0,0,0,.55); }
+
+  /* Aufleuchten beim Hinzufügen: dasselbe Bild noch einmal, über einen nativen SVG-Filter aufgehellt,
+     kurz sichtbar, dann verblassend — hat dadurch exakt dieselbe Kontur wie das Motiv selbst.
+     Der Helligkeits-Effekt läuft über einen SVG-<filter> (siehe filter="url(#lkBrighten)" im Markup),
+     nicht über CSS-filter — CSS-filter-Animationen auf SVG-<image> werden in Safari/iOS nicht
+     zuverlässig unterstützt. Hier wird nur noch Opacity animiert, das funktioniert überall zuverlässig.
+     Läuft wieder sofort/synchron mit allem anderen — eine Verzögerung hatte dazu geführt, dass
+     zusammengehörige Teile (z.B. Traverse + ihre Strobos) beim Umbau kurz unterschiedlich "weit" waren
+     und dadurch lose in der Luft hängend wirkten. */
+  @keyframes lk-item-flash-img{
+    0%   { opacity: 1; }
+    45%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .lk-widget .lk-flash-image{
+    opacity: 0;
+    pointer-events: none;
+    animation: lk-item-flash-img .6s ease-out;
+  }
+  /* Ausblenden beim Entfernen: das Teil bleibt mit seinem alten Bild kurz stehen und verblasst sanft,
+     statt abrupt zu verschwinden. */
+  @keyframes lk-fade-out{
+    0%   { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .lk-widget .lk-fade-out{
+    pointer-events: none;
+    animation: lk-fade-out .25s ease-in forwards;
+  }
+
+  .lk-widget .ph-tile-wrap{ position:relative; display:inline-block; flex:none; }
+  /* Aufleuchten der losen Geraete unten: exakt dasselbe Bild, aufgehellt darueber gelegt und
+     ausblendend — gleiche Kontur wie das Motiv, kein Kasten. */
+  .lk-widget .ph-flash-image{
+    position:absolute; inset:0;
+    object-fit:contain;
+    filter: brightness(1.35) saturate(1.1);
+    opacity: 0;
+    pointer-events: none;
+    animation: lk-item-flash-img .6s ease-out;
+  }
+
+  /* Massskala: blitzt nur auf, wenn sich Breite/Hoehe tatsaechlich geaendert haben */
+  @keyframes lk-scale-flash{
+    0%   { opacity: .35; }
+    25%  { opacity: 1; }
+    100% { opacity: .35; }
+  }
+  .lk-widget .lk-scale{ opacity:.35; }
+  .lk-widget .lk-scale-flash{ animation: lk-scale-flash .9s ease-out; }
+
+  .lk-widget .categories-scroll{margin-bottom:20px;}
+
+  /* Texte in der Vorschaubox bekommen eine eigene GPU-Ebene. Die Box selbst wird beim Scrollen per
+     transform mitgeschoben; ohne eigene Ebene rastert der Browser die Schrift dabei laufend neu, was
+     als "doppelte"/verzerrte Schrift sichtbar wird. */
+  .lk-widget .stage-caption{
+    text-align:center;font-size:.72rem !important;font-style:italic;margin:14px 0 0 !important;
+    color:var(--orange) !important;opacity:.75;
+  }
+  .lk-widget .stage-box-placeholder{display:none;}
+
+  .lk-widget .stage-canvas{position:relative;width:100%;}
+  .lk-widget .stage-canvas svg{width:100%;height:auto;display:block;}
+
+  .lk-widget .dj-label{
+    text-align:center;font-size:.72rem !important;color:var(--muted) !important;margin:4px 0 0 !important;
+    min-height:1.1em;
+  }
+
+  .lk-widget .stage-tools{
+    display:flex; gap:10px; justify-content:center; margin-top:14px; flex-wrap:wrap;
+  }
+  .lk-widget .stage-tool-btn{
+    background:transparent; border:1px solid var(--border); color:var(--muted) !important;
+    border-radius:999px; padding:6px 14px; font-size:.76rem !important; cursor:pointer;
+    transition:background .15s, color .15s, border-color .15s;
+  }
+  .lk-widget .stage-tool-btn:hover{ background:rgba(255,138,61,.12); border-color:var(--orange); color:var(--white-ish) !important; }
+  .lk-widget .stage-tool-btn.is-active{ background:rgba(255,138,61,.18); border-color:var(--orange); color:var(--orange) !important; }
+  .lk-widget .stage-tool-btn--danger:hover{ background:rgba(255,90,90,.14); border-color:#ff6b6b; color:#ffb3b3 !important; }
+  .lk-widget .stage-tools--ambient{ align-items:center; margin-top:6px; }
+  .lk-widget .stage-tool-label{ font-size:.74rem !important; color:var(--muted) !important; }
+  .lk-widget .stage-tool-btn--round{ border-radius:50%; width:26px; height:26px; padding:0; display:flex; align-items:center; justify-content:center; font-size:1rem; }
+  .lk-widget .stage-tool-count{ font-weight:700 !important; color:var(--white-ish) !important; min-width:18px; text-align:center; font-size:.85rem !important; }
+
+  .lk-widget .stage-mini-label{
+    font-size:.66rem !important;color:var(--muted) !important;letter-spacing:.03em;text-transform:uppercase;
+  }
+  .lk-widget .extra-list{margin-top:10px;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:64px;}
+  .lk-widget .extra-list-row{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;}
+
+  .lk-widget .ph-tile{
+    display:block; object-fit:contain; flex:none;
+  }
+  .lk-widget .ph-placeholder{
+    border-radius:8px;flex:none;
+    border:1px dashed var(--border); background:rgba(255,255,255,.04);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .lk-widget .ph-placeholder svg{width:40%;height:40%;opacity:.5;}
+  .lk-widget .ph-more{
+    width:34px;height:34px;border-radius:9px;flex:none;background:rgba(255,138,61,.18);
+    border:1px solid var(--border); display:flex;align-items:center;justify-content:center;
+    font-size:.72rem !important;font-weight:700 !important;color:var(--orange) !important;
+    align-self:flex-end;
+  }
+
+
+  .lk-widget .cat-head{display:flex;align-items:center;gap:12px;margin:34px 0 14px;}
+  .lk-widget .cat-head:first-of-type{margin-top:0;}
+  .lk-widget .cat-icon{
+    width:42px;height:42px;border-radius:12px;background:rgba(255,138,61,.12);
+    display:flex;align-items:center;justify-content:center;flex:none;
+  }
+  .lk-widget .cat-icon svg{width:24px;height:24px;}
+  .lk-widget .cat-text h2{margin:0 !important;font-size:1.1rem !important;color:var(--white-ish) !important;font-weight:700 !important;}
+  .lk-widget .cat-text p{margin:2px 0 0 !important;font-size:.82rem !important;color:var(--muted) !important;}
+
+  .lk-widget .item{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:12px 14px; margin-bottom:9px; display:flex; align-items:center; justify-content:space-between; gap:16px;
+    touch-action:manipulation;
+  }
+  .lk-widget .item-left{display:flex;align-items:center;gap:14px;min-width:0;}
+  .lk-widget .item-thumb{
+    width:44px;height:44px;border-radius:10px;object-fit:contain;flex:none;
+    background:#000;border:1px solid var(--border);padding:4px;box-sizing:border-box;
+  }
+  .lk-widget .item-info{min-width:0;}
+  .lk-widget .item-info h3{margin:0 0 2px !important;font-size:.98rem !important;color:var(--white-ish) !important;font-weight:700 !important;}
+  /* Beschreibung + Preis bewusst einzeilig: nowrap statt Umbruch, bei Platzmangel wird gekuerzt */
+  .lk-widget .item-info span{color:var(--muted) !important;font-size:.8rem !important;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .lk-widget .stepper{display:flex;align-items:center;gap:12px;flex:none;touch-action:manipulation;}
+  .lk-widget .stepper button{
+    width:34px;height:34px;border-radius:50%;border:1px solid var(--border);
+    background:transparent;color:var(--white-ish) !important;font-size:1.1rem;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:background .15s;
+    touch-action:manipulation;
+  }
+  .lk-widget .stepper button:hover:not(:disabled){background:rgba(255,138,61,.15);border-color:var(--orange);}
+  .lk-widget .stepper button:disabled{opacity:.3;cursor:not-allowed;}
+  .lk-widget .stepper .count{
+    min-width:34px;text-align:center;font-weight:800 !important;font-size:1.15rem !important;
+    color:#ffffff !important;
+  }
+  .lk-widget .max-note{font-size:.72rem !important;color:var(--muted) !important;margin-top:2px;}
+
+  .lk-widget .summary{
+    margin-top:28px; background:linear-gradient(135deg,#16213c,#0c1424);
+    border:1px solid var(--border); border-radius:16px; padding:24px;
+  }
+  .lk-widget #summaryRows{
+    font-size:.92rem !important; color:var(--muted) !important; line-height:1.7 !important;
+  }
+  .lk-widget #summaryRows .empty{font-style:italic;}
+  .lk-widget #summaryRows .tag{
+    color:var(--white-ish) !important; background:rgba(255,138,61,.12);
+    border-radius:8px; padding:2px 8px; display:inline-block; margin:2px 4px 2px 0; font-size:.85rem !important;
+  }
+  .lk-widget .summary-total{
+    display:flex;justify-content:space-between;align-items:baseline;
+    margin-top:14px;padding-top:14px;border-top:1px solid var(--border);
+  }
+  .lk-widget .summary-total span{color:var(--muted) !important;font-size:.85rem !important;}
+  .lk-widget .summary-total b{font-size:1.6rem !important;color:var(--orange) !important;}
+  .lk-widget .disclaimer{font-size:.78rem !important;color:var(--muted) !important;margin-top:14px;line-height:1.5;}
+  .lk-widget .cta{
+    display:inline-block;margin-top:20px;width:100%;text-align:center;
+    background:var(--orange);color:var(--night) !important;font-weight:700 !important;text-decoration:none;
+    padding:14px;border-radius:999px;box-sizing:border-box;
+  }
+  .lk-widget .cta:hover{background:var(--orange-deep);}
+
+  /* ---- Responsive Größenstufen ----
+     Standard (>1200px, großer Desktop/32"): Größen wie oben definiert.
+     Stufe 2 (601–1200px, kleinerer Laptop/15"): Vorschaubox, Artikel und Schrift moderat verkleinert.
+     Stufe 3 (≤600px, Handy): nochmals kleiner, volle Breite. */
+  /* ---- Responsive Groessenstufen ----
+     Angewandt ueber Klassen (lk-size-lg/md/sm), die per JS anhand der TATSAECHLICH gerenderten
+     Breite der Box gesetzt werden -- nicht per @media, da die Fensterbreite bei eingebetteten
+     IONOS-Widgets nichts ueber die real verfuegbare Breite der Box aussagt.
+     lg (Standard, kein Klassenzusatz noetig): grosse Bildschirme, Groessen wie oben definiert.
+     md (lk-size-md): mittlere Breite, z.B. kleinerer Laptop.
+     sm (lk-size-sm): schmale Breite, z.B. Handy. */
+  .lk-widget.lk-size-md{padding:26px 14px;}
+  .lk-widget.lk-size-md .wrap{max-width:680px;}
+  .lk-widget.lk-size-md .lk-title{font-size:1.42rem !important;}
+  .lk-widget.lk-size-md .sub{font-size:.9rem !important;margin-bottom:26px !important;}
+  .lk-widget.lk-size-md .stage-box{padding:15px;}
+  .lk-widget.lk-size-md .cat-head{margin:28px 0 12px;}
+  .lk-widget.lk-size-md .cat-icon{width:38px;height:38px;}
+  .lk-widget.lk-size-md .cat-icon svg{width:21px;height:21px;}
+  .lk-widget.lk-size-md .cat-text h2{font-size:1.03rem !important;}
+  .lk-widget.lk-size-md .cat-text p{font-size:.78rem !important;}
+  .lk-widget.lk-size-md .item{padding:11px 13px;margin-bottom:8px;}
+  .lk-widget.lk-size-md .item-thumb{width:40px;height:40px;}
+  .lk-widget.lk-size-md .item-info h3{font-size:.92rem !important;}
+  .lk-widget.lk-size-md .item-info span{font-size:.75rem !important;}
+  .lk-widget.lk-size-md .max-note{font-size:.68rem !important;}
+  .lk-widget.lk-size-md .stepper{gap:10px;}
+  .lk-widget.lk-size-md .stepper button{width:31px;height:31px;font-size:1rem;}
+  .lk-widget.lk-size-md .stepper .count{font-size:1.05rem !important;min-width:30px;}
+  .lk-widget.lk-size-md .summary{padding:20px;}
+  .lk-widget.lk-size-md #summaryRows{font-size:.86rem !important;}
+  .lk-widget.lk-size-md .summary-total b{font-size:1.45rem !important;}
+
+  .lk-widget.lk-size-sm{padding:20px 10px;}
+  .lk-widget.lk-size-sm .wrap{max-width:100%;}
+  .lk-widget.lk-size-sm .lk-title{font-size:1.22rem !important;}
+  .lk-widget.lk-size-sm .sub{font-size:.82rem !important;margin-bottom:22px !important;}
+  .lk-widget.lk-size-sm .stage-box{padding:12px;}
+  .lk-widget.lk-size-sm .cat-head{margin:24px 0 10px;gap:10px;}
+  .lk-widget.lk-size-sm .cat-icon{width:34px;height:34px;}
+  .lk-widget.lk-size-sm .cat-icon svg{width:19px;height:19px;}
+  .lk-widget.lk-size-sm .cat-text h2{font-size:.96rem !important;}
+  .lk-widget.lk-size-sm .cat-text p{font-size:.74rem !important;}
+  .lk-widget.lk-size-sm .item{padding:9px 11px;gap:8px;margin-bottom:7px;}
+  .lk-widget.lk-size-sm .item-thumb{width:36px;height:36px;}
+  .lk-widget.lk-size-sm .item-info h3{font-size:.86rem !important;}
+  .lk-widget.lk-size-sm .item-info span{font-size:.7rem !important;}
+  .lk-widget.lk-size-sm .max-note{font-size:.62rem !important;}
+  .lk-widget.lk-size-sm .stepper{gap:8px;}
+  .lk-widget.lk-size-sm .stepper button{width:28px;height:28px;font-size:.95rem;}
+  .lk-widget.lk-size-sm .stepper .count{font-size:.98rem !important;min-width:26px;}
+  .lk-widget.lk-size-sm .summary{padding:16px;}
+  .lk-widget.lk-size-sm #summaryRows{font-size:.82rem !important;}
+  .lk-widget.lk-size-sm .summary-total b{font-size:1.3rem !important;}
+  .lk-widget.lk-size-sm .cta{padding:12px;font-size:.92rem;}
+</style>
+
+
+<div class="lk-widget">
+<div class="wrap">
+  <p class="lk-title">Event-Konfigurator</p>
+  <p class="sub">Stellt euch DJ, Licht und Sound für eure Feier zusammen — der ungefähre Preis wird direkt berechnet.</p>
+
+  <div class="stage-box" id="stageBox">
+    <div class="stage-canvas">
+      <svg id="stageSvg" viewBox="0 0 700 420" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <p class="dj-label" id="djLabel"></p>
+    <div class="extra-list" id="extraList"></div>
+    <p class="stage-caption" id="stageCaption">Vorschau eures Setups — füllt sich mit eurer Auswahl</p>
+    <div class="stage-tools">
+      <button type="button" class="stage-tool-btn" id="gridToggleBtn" onclick="toggleCoordGrid()">Koordinaten anzeigen</button>
+      <button type="button" class="stage-tool-btn stage-tool-btn--danger" id="resetAllBtn" onclick="resetAllSelections()">Alles zurücksetzen</button>
+    </div>
+    <div class="stage-tools stage-tools--ambient" id="ambientTools">
+      <span class="stage-tool-label">Manuell in Ambientebeleuchtung:</span>
+      <button type="button" class="stage-tool-btn stage-tool-btn--round" onclick="changeAmbientManual(-1)">−</button>
+      <span class="stage-tool-count" id="ambientManualCount">0</span>
+      <button type="button" class="stage-tool-btn stage-tool-btn--round" onclick="changeAmbientManual(1)">+</button>
+    </div>
+  </div>
+
+  <div id="categories" class="categories-scroll"></div>
+
+  <div class="summary">
+    <div id="summaryRows"></div>
+    <div class="summary-total">
+      <span>Geschätzte Gesamtsumme</span>
+      <b id="totalPrice">0 €</b>
+    </div>
+    <p class="disclaimer">Unverbindliche Preisschätzung, kein Angebot. Endpreis abhängig von Location, Aufbauaufwand und Verfügbarkeit — wir bestätigen euch die genaue Zusammenstellung persönlich.</p>
+  </div>
+
+  <a class="cta" id="requestBtn" href="#" target="_blank" rel="noopener">Anfrage mit dieser Auswahl senden</a>
+</div>
+</div>
+
+<script>
+  // ---- Beispiel-Icons (einfache SVGs für Kategorien ohne Foto) ----
+  const icons = {
+    dj: '<svg viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.4" fill="#ff8a3d" stroke="none"/><path d="M12 3v2M21 12h-2M3 12h2M12 19v2"/></svg>',
+    licht: '<svg viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="1.8"><path d="M12 3v6M8 21l4-6 4 6M5 10l14-2M5 10l2 4M19 8l-2 4"/></svg>',
+    sound: '<svg viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="8" r="2.5"/><circle cx="12" cy="16" r="1.3"/></svg>',
+  };
+
+  // ============================================================================
+   const photos = {
+    subwoofer: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/9e8d2577-b0cb-46bf-915e-6e2f266bdfb1/image.png',
+    movingHead: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/d480e9f5-9f09-407b-a72c-c19554a19cae/image.png',
+    truss05: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/33de9f9e-f8cc-4b30-a5b2-0ee0792ea327/image.png',
+    truss10: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/ae30e8e7-2f3e-4ed7-9c4a-0eb5968d5cbc/image.png',
+    truss15: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/df698085-eab5-4af5-aeb6-7be5eb12f96e/image.png',
+    gantry: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/6f3608e1-313a-4101-87fa-e0ac93e68f30/l0,t0,w599,h353/image.png',
+    wallwasherThumb: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/06527a64-36b6-4559-9996-0d7e5244fa4c/image-480x177.png',
+    strobeThumb: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/266996f1-adcf-45d3-9d62-47f23e2869b5/image-480x304.png',
+    movingHeadThumb: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/7e9ded40-11a4-485c-a5a8-a7b6137f629d/image.png',
+    strobe: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/010a399c-6cc6-4b75-8033-f4c15272136e/image.png',
+    strahler: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/2f9b3292-c282-435b-940b-9fe0d717fb14/image.png',
+    strahlerFront: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/f1e8fd3d-ba7a-44ce-bc37-768ab09b0ea3/image.png',
+    strahlerAngled: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/1a358048-a80d-428b-9e4b-0a8cadebd3ae/image.png',
+    wallwasher: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/0d09daee-32ec-4a48-b3e0-ed003895eff5/image.png',
+    topteil: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/8822dfaf-3428-4d01-9f1b-b96439392b7f/image.png',
+    djpult: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/dcd668af-6f1b-4e8e-869f-c8b8f5a1aeac/image-480x462.png',
+    soundstack: 'https://n2094879.websitebuilder.online/wp-content/uploads/go-x/u/270cf5cc-3f07-45cb-a874-6c77933eb220/image.png',
+  };
+  // ============================================================================
+
+  // ---- Hier lässt sich alles anpassen: Kategorien, Preise, Min/Max, Bilder ----
+  const categories = [
+    {
+      key: 'dj',
+      title: 'DJ',
+      desc: 'Bucht euren DJ für die gewünschte Anzahl Stunden.',
+      icon: icons.dj,
+      items: [
+        { id: 'dj', name: 'DJ-Booking', desc: 'für die gesamte Feier', price: 50, min: 0, max: 7, unit: 'Std.', img: photos.djpult },
+      ],
+    },
+    {
+      key: 'licht',
+      title: 'Licht',
+      desc: 'Wählt aus, wie viele Lichter ihr euch für eure Feier vorstellt. Ab 6 Lichtern -2%, ab 12 Lichtern -5% auf die Lichtsumme.',
+      icon: icons.licht,
+      items: [
+        { id: 'a', name: 'Parstrahler', desc: 'LED-Scheinwerfer', price: 10, min: 0, max: 16, unit: 'Stück', img: photos.strahler },
+        { id: 'b', name: 'Moving Head', desc: 'bewegliches Show-Licht', price: 20, min: 0, max: 8, unit: 'Stück', img: photos.movingHeadThumb },
+        { id: 'c', name: 'Strobo / Effektlicht', desc: 'kompaktes Doppel-Flutlicht', price: 30, min: 0, max: 8, unit: 'Stück', img: photos.strobeThumb },
+        { id: 'd', name: 'Moving Wall Washer', desc: 'bewegliches Spot-Licht', price: 25, min: 0, max: 4, unit: 'Stück', img: photos.wallwasherThumb },
+      ],
+    },
+    {
+      key: 'sound',
+      title: 'Sound',
+      desc: 'Subwoofer und Topteil bilden immer ein Paar — beide werden gemeinsam ausgewählt bzw. abgewählt.',
+      icon: icons.sound,
+      items: [
+        { id: 'sub', name: 'Subwoofer', desc: 'für mehr Bass auf der Tanzfläche', price: 50, min: 0, max: 2, unit: 'Stück', img: photos.subwoofer },
+        { id: 'top', name: 'Topteil', desc: 'zusätzliche PA-Lautsprecher', price: 50, min: 0, max: 2, unit: 'Stück', img: photos.topteil },
+      ],
+    },
+  ];
+
+  const allItems = categories.flatMap(c => c.items);
+  const state = {};
+  allItems.forEach(i => state[i.id] = i.min);
+  // Wie viele Parstrahler der Nutzer manuell von der Traverse in die Ambientebeleuchtung verschoben
+  // hat (per Button unten in der Vorschau) — standardmäßig 0, d.h. es wird immer versucht, so viele
+  // wie möglich auf der Traverse unterzubringen, bevor irgendwas in die Ambientebeleuchtung rutscht.
+  state.aAmbientManual = 0;
+
+  const categoriesEl = document.getElementById('categories');
+  const summaryRowsEl = document.getElementById('summaryRows');
+  const totalPriceEl = document.getElementById('totalPrice');
+  const requestBtn = document.getElementById('requestBtn');
+
+  // ---- Verknüpfte Auswahl: Subwoofer und Topteil sind immer ein Paar ----
+  // Jede Änderung an einem der beiden setzt den anderen auf denselben Wert.
+  const PAIRED = { sub: 'top', top: 'sub' };
+
+  // Diese Lichter lassen sich normalerweise nur in Zweierschritten auswählen (wirkt einzeln
+  // unsymmetrisch, weil sie paarweise links/rechts auf den Türmen sitzen).
+  const STEP = { a: 2, b: 2, c: 2, d: 2 };
+
+  // Ab dem 7. Moving Head hängt alles gemeinsam am großen Traversen-Gerüst. Dort spielt Symmetrie
+  // keine Rolle mehr, deshalb sind Moving Head, Strobo und Moving Wall Washer dann einzeln wählbar.
+  // Parstrahler bleiben dort bis 10 Stück paarweise (sitzen bis dahin symmetrisch links/rechts),
+  // ab 10 sortieren sie sich auch oben auf der Traverse ein und lassen sich einzeln wählen.
+  const SINGLE_STEP_IN_GANTRY = { b: true, c: true, d: true };
+  // dir: +1 beim Hinzufuegen, -1 beim Entfernen (0 = nur zur Anzeige/Beschriftung).
+  // Die Richtung ist wichtig: Beim Hochzaehlen soll 6 -> 7 moeglich sein, beim Runterzaehlen aber
+  // 6 -> 4 (nicht 6 -> 5). Ohne diese Unterscheidung entstehen ungerade Werte unterhalb von 7,
+  // wodurch die Folge dauerhaft auf 1 - 3 - 5 - 7 verrutscht.
+  function stepFor(id, dir){
+    const base = STEP[id] || 1;
+    if(id === 'a'){
+      if(state.b < 7) return base;                     // Tuerme: immer paarweise
+      if(dir > 0) return state.a >= 10 ? 1 : base;      // ...8 -> 10 -> 11 -> 12...
+      if(dir < 0) return state.a > 10 ? 1 : base;       // ...12 -> 11 -> 10 -> 8...
+      return state.a >= 10 ? 1 : base;
+    }
+    if(!SINGLE_STEP_IN_GANTRY[id]) return base;
+    if(id === 'b'){
+      if(dir > 0) return state.b >= 6 ? 1 : base;    // 6 -> 7 -> 8
+      if(dir < 0) return state.b >= 7 ? 1 : base;    // 8 -> 7 -> 6 -> 4 -> 2 -> 0
+      return state.b >= 6 ? 1 : base;
+    }
+    return state.b >= 7 ? 1 : base;                  // Strobo/Wallwasher: nur solange das Gerüst steht
+  }
+
+  // Beim Verlassen des Gerüst-Modus (b fällt unter 7) müssen ungerade Werte wieder auf gerade
+  // zurückgeführt werden, sonst blieben die Türme unsymmetrisch bestückt.
+  function normalizeToEvenSteps(){
+    if(state.b >= 7) return;
+    ['a', 'c', 'd'].forEach(id => {
+      if(state[id] % 2 !== 0){
+        const item = allItems.find(i => i.id === id);
+        state[id] = Math.max(item.min, state[id] - 1);
+      }
+    });
+  }
+
+  function renderCategories(){
+    categoriesEl.innerHTML = categories.map(cat => `
+      <div class="cat-head">
+        <div class="cat-icon">${cat.icon}</div>
+        <div class="cat-text">
+          <h2>${cat.title}</h2>
+          <p>${cat.desc}</p>
+        </div>
+      </div>
+      ${cat.items.map(i => {
+        const min = i.min;
+        const stepUp = stepFor(i.id, 1);
+        const stepDown = stepFor(i.id, -1);
+        const step = stepUp;
+        return `
+        <div class="item">
+          <div class="item-left">
+            ${i.img ? `<img class="item-thumb" src="${i.img}" alt="${i.name}">` : ''}
+            <div class="item-info">
+              <h3>${i.name}</h3>
+              <span>${i.desc} — ${i.price} € / ${i.unit === 'Std.' ? 'Stunde' : 'Stück'}</span>
+              <div class="max-note">${min > 0 ? 'min. ' + min + ' · ' : ''}max. ${i.max} ${i.unit}${step > 1 ? ' · nur in 2er-Schritten' : ''}</div>
+            </div>
+          </div>
+          <div class="stepper">
+            <button onclick="changeCount('${i.id}', -1)" ${(state[i.id] - stepDown) < min ? 'disabled' : ''}>−</button>
+            <span class="count" id="count-${i.id}">${state[i.id]}</span>
+            <button onclick="changeCount('${i.id}', 1)" ${(state[i.id] + stepUp) > i.max ? 'disabled' : ''}>+</button>
+          </div>
+        </div>
+      `;}).join('')}
+    `).join('');
+  }
+
+  function changeCount(id, dir){
+    const item = allItems.find(i => i.id === id);
+    const step = stepFor(id, dir);
+    const next = state[id] + dir * step;
+    if(next < item.min || next > item.max) return;
+    state[id] = next;
+
+    // Sub/Top-Paar synchron halten
+    const partnerId = PAIRED[id];
+    if(partnerId){
+      const partnerItem = allItems.find(i => i.id === partnerId);
+      state[partnerId] = Math.min(next, partnerItem.max);
+    }
+
+    normalizeToEvenSteps();
+
+    flashAllowed = dir > 0;   // nur beim Hinzufuegen aufblitzen
+    renderCategories();
+    renderStage();
+    renderSummary();
+  }
+
+
+  // ---- Preis-Sonderregeln ----
+  function djPrice(hours){
+    // Immer 50€ pro Stunde, kein Staffelrabatt
+    return hours * 50;
+  }
+
+  function lightPricing(){
+    const qtyA = state['a'], qtyB = state['b'], qtyC = state['c'], qtyD = state['d'];
+    const base = qtyA * 10 + qtyB * 20 + qtyC * 30 + qtyD * 25;
+    const totalQty = qtyA + qtyB + qtyC + qtyD;
+    let rate = 0;
+    if(totalQty >= 12) rate = 0.05;
+    else if(totalQty >= 6) rate = 0.02;
+    const discount = Math.round(base * rate * 100) / 100;
+    return { base, totalQty, rate, discount, final: base - discount };
+  }
+
+  function renderSummary(){
+    const selected = allItems.filter(i => state[i.id] > 0);
+    const light = lightPricing();
+
+    if(selected.length === 0){
+      summaryRowsEl.innerHTML = '<span class="empty">Noch nichts ausgewählt.</span>';
+    } else {
+      const tags = selected.map(i => {
+        if(i.id === 'dj'){
+          return `<span class="tag">${state.dj} Std. DJ-Booking · ${djPrice(state.dj)} €</span>`;
+        }
+        // Licht-Items zeigen den regulären Einzelpreis, Rabatt kommt als eigene Zeile
+        return `<span class="tag">${state[i.id]} x ${i.name} · ${state[i.id] * i.price} €</span>`;
+      }).join('');
+      const discountTag = light.discount > 0
+        ? `<span class="tag" style="color:#8fe3a0 !important;">Mengenrabatt Licht (-${Math.round(light.rate*100)}%) · −${light.discount} €</span>`
+        : '';
+      summaryRowsEl.innerHTML = tags + discountTag;
+    }
+
+    const total = djPrice(state.dj) + light.final + (state.sub + state.top) * 50;
+    totalPriceEl.textContent = Math.round(total) + ' €';
+
+    const lines = [];
+    if(state.dj > 0) lines.push(`- ${state.dj} Std. DJ-Booking (${djPrice(state.dj)} €)`);
+    ['a', 'b', 'c', 'd'].forEach(id => {
+      const it = allItems.find(i => i.id === id);
+      if(state[id] > 0) lines.push(`- ${state[id]}x ${it.name} (${state[id] * it.price} €)`);
+    });
+    if(light.discount > 0) lines.push(`- Mengenrabatt Licht (-${Math.round(light.rate*100)}%): −${light.discount} €`);
+    if(state.sub > 0) lines.push(`- ${state.sub}x Subwoofer (${state.sub*50} €)`);
+    if(state.top > 0) lines.push(`- ${state.top}x Topteil (${state.top*50} €)`);
+
+    const subjectLines = selected.map(i => `${state[i.id]}${i.unit === 'Std.' ? 'h' : 'x'} ${i.name}`).join(', ');
+    const body = lines.length
+      ? `Hallo,%0D%0A%0D%0Aich interessiere mich für folgende Zusammenstellung:%0D%0A${lines.join('%0D%0A')}%0D%0A%0D%0AGeschätzte Summe: ${Math.round(total)} €%0D%0A%0D%0ADatum, Ort und weitere Infos zu meiner Feier:%0D%0A`
+      : 'Hallo,%0D%0A%0D%0Aich möchte mich zu DJ, Licht und Sound beraten lassen.';
+    requestBtn.href = `mailto:Jukert-Partyservice@outlook.de?subject=${encodeURIComponent('Anfrage Event-Konfiguration' + (subjectLines ? ' – ' + subjectLines : ''))}&body=${body}`;
+  }
+
+  const stageSvgEl = document.getElementById('stageSvg');
+  const extraListEl = document.getElementById('extraList');
+
+  const placeholderIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="#a9b0c0" stroke-width="1.8"><path d="M12 3v6M8 21l4-6 4 6M5 10l14-2M5 10l2 4M19 8l-2 4"/></svg>';
+
+  // Einheitlicher Maßstab: 1 realer Meter = PX_PER_METER Pixel. Alles unten leitet sich daraus ab,
+  // damit Traverse und aufgesetzte Geräte immer im gleichen Verhältnis zueinander stehen.
+  // Bestätigte Maße: Moving Head, Strobe/Blinder, Subwoofer, Traverse.
+  // Noch offen (Schätzwerte): Topteil, DJ-Pult.
+  const PX_PER_METER = 105;
+  const REAL_H = {
+    movingHead: 0.385,  // bestätigt
+    subwoofer: 0.661,   // bestätigt
+    top: 0.698,         // bestätigt
+    strobe: 0.19,       // bestätigt
+    dj: 1.35,           // bestätigt (1,5m breit x 1,35m hoch — Höhe als Anker, Breite folgt dem Fotoverhältnis)
+    strahler: 0.22,     // bestätigt: Durchmesser/Höhe ca. 22cm in echt
+    wallwasher: 1.00,   // bestätigt: 1m x 0,15m x 0,15m — im Foto steht er hochkant, die 1m-Länge ist die Bild-Höhe
+    soundstack: 2.1,    // Schätzung (Sub + Distanzstange + Top), noch offen — etwas größer
+  };
+  // Breiten-/Höhen-Verhältnis je Objekt (aus den realen Maßen bzw. Schätzung)
+  const RATIO = {
+    movingHead: 332 / 490,    // neu ausgeschnittenes Foto (Setup-Vorschau/Bühne)
+    subwoofer: 297 / 360,     // neu ausgeschnittenes Foto
+    top: 359 / 616,           // neu ausgeschnittenes Foto
+    strobe: 181 / 351,        // neu ausgeschnittenes Foto, gerade gedreht (Setup-Vorschau/Bühne)
+    dj: 480 / 462,             // neu ausgeschnittenes Foto
+    strahler: 452 / 475,      // neu ausgeschnittenes Foto (Artikel-Icon)
+    strahlerFront: 308 / 256, // neu ausgeschnittenes Foto: Frontalansicht (für Sockel unter den Traversen)
+    strahlerAngled: 288 / 330, // neu ausgeschnittenes Foto: Schrägansicht (Ecken/Beine/Füße im Gerüst)
+    wallwasher: 80 / 589,      // neu ausgeschnittenes Foto, gerade gedreht (Setup-Vorschau/Bühne)
+    soundstack: 292 / 1063,   // neu ausgeschnittenes Foto
+    truss05: 169 / 293,       // neu ausgeschnittenes Foto (Breite/Höhe der 0,5m-Traverse)
+    truss10: 127 / 412,       // neu ausgeschnittenes Foto (1,0m-Traverse)
+    truss15: 112 / 517,       // neu ausgeschnittenes Foto (1,5m-Traverse)
+    gantry: 599 / 353,        // neues, hochaufgelöstes Foto (Traversen-Gerüst, Breite/Höhe)
+  };
+  const m = h => Math.round(h * PX_PER_METER);
+
+  const SIZE = {
+    lichtA:      { w: Math.round(m(REAL_H.strahler) * RATIO.strahler), h: m(REAL_H.strahler) }, // echtes Foto (Strahler)
+    lichtAFront: { w: Math.round(m(REAL_H.strahler) * RATIO.strahlerFront), h: m(REAL_H.strahler) },
+    lichtAAngled:{ w: Math.round(m(REAL_H.strahler) * RATIO.strahlerAngled), h: m(REAL_H.strahler) },
+    wallwasher:  { w: m(0.15), h: m(REAL_H.wallwasher) }, // 1m lang x 15cm breit — feste Realmasse (leichtes Strecken durch Fotoverhaeltnis-Abweichung ist minimal)
+    movingHead:  { w: Math.round(m(REAL_H.movingHead) * (RATIO.movingHead + 0.25) * 1.28), h: Math.round(m(REAL_H.movingHead) * 1.28) }, // echtes Foto
+    strobe:      { w: Math.round(m(REAL_H.strobe) * RATIO.strobe), h: m(REAL_H.strobe) },        // echtes Foto, frei hängend
+    strobeSmall: { w: Math.round(m(REAL_H.strobe) * RATIO.strobe * 1.9), h: Math.round(m(REAL_H.strobe) * 1.9) }, // echtes Foto, klein an Pfosten montiert
+    subwoofer:   { w: Math.round(m(REAL_H.subwoofer) * RATIO.subwoofer), h: m(REAL_H.subwoofer) }, // echtes Foto, bestätigt
+    top:         { w: Math.round(m(REAL_H.top) * RATIO.top), h: m(REAL_H.top) },          // echtes Foto, Höhe geschätzt
+    soundstack:  { w: Math.round(m(REAL_H.soundstack) * RATIO.soundstack), h: m(REAL_H.soundstack) }, // echtes Foto, Höhe geschätzt
+    dj:          { w: m(1.5), h: m(REAL_H.dj) },          // 1,5m breit x 1,35m hoch — feste Realmasse, unabhaengig vom Fotoverhaeltnis (leichtes Strecken ist bei nur ~7% Abweichung nicht sichtbar)
+  };
+  // Traversen-Höhen direkt aus der Länge (1m = PX_PER_METER), Breite aus dem echten Fotoverhältnis —
+  // ergibt für alle drei Längen eine sehr ähnliche, realistische Traversenbreite (~31–35px)
+  const TRUSS_SIZE = {
+    0.5: { w: Math.round(m(0.5) * RATIO.truss05), h: m(0.5) },
+    1.0: { w: Math.round(m(1.0) * RATIO.truss10), h: m(1.0) },
+    1.5: { w: Math.round(m(1.5) * RATIO.truss15), h: m(1.5) },
+  };
+
+  function tile(img, alt, size, rotateDeg, isNew){
+    const rot = rotateDeg ? `transform:rotate(${rotateDeg}deg);` : '';
+    const inner = img
+      ? `<img class="ph-tile" style="width:100%;height:100%;" src="${img}" alt="${alt}">`
+      : `<div class="ph-placeholder" style="width:100%;height:100%;" title="${alt} — Foto folgt">${placeholderIcon}</div>`;
+    // Aufleuchten: exakt dasselbe Bild noch einmal darüber, aufgehellt und ausblendend — dadurch
+    // stimmt die Kontur genau (kein Kasten), wie bei den Geräten auf der Bühne.
+    const flash = (isNew && img) ? `<img class="ph-flash-image" src="${img}" alt="" style="width:100%;height:100%;">` : '';
+    return `<span class="ph-tile-wrap" style="width:${size.w}px;height:${size.h}px;${rot}">${inner}${flash}</span>`;
+  }
+
+  function tileStack(img, alt, size, qty, cap, rotateDeg, newCount){
+    if(qty <= 0) return '';
+    const shown = Math.min(qty, cap);
+    const newShown = Math.max(0, Math.min(newCount || 0, shown));
+    let html = '';
+    for(let n = 0; n < shown; n++) html += tile(img, alt, size, rotateDeg, n >= shown - newShown);
+    if(qty > cap) html += `<div class="ph-more">+${qty - cap}</div>`;
+    return html;
+  }
+
+  // ---- Rig-Aufbau: Reihenfolge & Traversenlängen für die ersten 6 Moving Heads ----
+  // 1: 0,5m links · 2: 0,5m rechts · 3: 1m links · 4: 1m rechts · 5: 1,5m links · 6: 1,5m rechts
+  // (von hinten/klein nach vorne/groß — Parstrahler ohne Traverse füllen sich in derselben Reihenfolge)
+  const POLE_ORDER = [
+    { len: 0.5, side: 'left' },
+    { len: 0.5, side: 'right' },
+    { len: 1.0, side: 'left' },
+    { len: 1.0, side: 'right' },
+    { len: 1.5, side: 'left' },
+    { len: 1.5, side: 'right' },
+  ];
+
+  // ---- Feste Belegung je Strobo-Stufe (nur 2/4/6/8 wählbar) ----
+  // 2 = je 1x auf 0,5m-Traverse · 4 = je 2x auf 1,0m-Traverse
+  // 6 = je 1x auf 0,5m + je 2x auf 1,0m-Traverse (kein 1,5m nötig, solange kein MWW dazukommt)
+  // 8 = je 3x auf 1,5m + je 1x auf 1m-Traverse (3 Stück passen nicht mehr auf die 1m-Traverse)
+  const STROBE_TIERS = {
+    2: { 'left-0.5': ['only'], 'right-0.5': ['only'] },
+    4: { 'left-1': ['top', 'bottom'], 'right-1': ['top', 'bottom'] },
+    6: { 'left-0.5': ['only'], 'right-0.5': ['only'], 'left-1': ['top', 'bottom'], 'right-1': ['top', 'bottom'] },
+    8: { 'left-1.5': ['top', 'middle', 'bottom'], 'right-1.5': ['top', 'middle', 'bottom'], 'left-1': ['only'], 'right-1': ['only'] },
+  };
+  // Sonderfall: kommt bei Stufe 6 zusätzlich ein Moving Wall Washer dazu (der sowieso eine 1,5m-Traverse
+  // braucht), macht es keinen Sinn extra noch eine 1m-Traverse aufzubauen — dann teilen sich Strobo und
+  // MWW stattdessen dieselbe 1,5m-Traverse (wie ursprünglich), spart eine unnötige dritte Traversenart.
+  const STROBE_TIERS_WITH_MWW = {
+    6: { 'left-1.5': ['top', 'bottom'], 'right-1.5': ['top', 'bottom'], 'left-0.5': ['only'], 'right-0.5': ['only'] },
+  };
+  // Sonderfall: wenn schon alle 6 Pfosten durch Moving Heads stehen, ist die 1m-Traverse durch den
+  // Kopf oben schon "belegt" — Strobos weichen dann auf die Mitte der 1,5m-Traverse aus statt auf 1m.
+  const STROBE_TIERS_ALL_HEADS = {
+    2: { 'left-0.5': ['only'], 'right-0.5': ['only'] },
+    4: { 'left-0.5': ['only'], 'right-0.5': ['only'], 'left-1.5': ['middle'], 'right-1.5': ['middle'] },
+    6: { 'left-0.5': ['only'], 'right-0.5': ['only'], 'left-1.5': ['top', 'bottom'], 'right-1.5': ['top', 'bottom'] },
+    8: { 'left-1.5': ['top', 'middle', 'bottom'], 'right-1.5': ['top', 'middle', 'bottom'], 'left-0.5': ['only'], 'right-0.5': ['only'] },
+  };
+  // Sonderfall bei GENAU 4 Moving Heads + Wall Washer + 4 Strobo: statt die 1m-Traverse zu nutzen,
+  // reicht die 0,5m-Traverse für den inneren Kopf + Strobo (kleinste mögliche Traverse), die 1,5m-Traverse
+  // trägt außen Kopf + Strobo + den Wall Washer (der geht sowieso nur dahin). Keine 1m-Traverse nötig.
+  const STROBE_TIERS_4_WW_4HEADS = {
+    4: { 'left-0.5': ['only'], 'right-0.5': ['only'], 'left-1.5': ['top'], 'right-1.5': ['top'] },
+  };
+  // NUR bei genau 4 Moving Heads (0,5m UND 1m tragen dann schon beide einen Kopf) ohne Wall Washer:
+  // die beiden Strobos verteilen sich auf die beiden ohnehin schon vorhandenen Türme, statt gestapelt
+  // auf der 1m-Traverse zu sitzen. 1m behält seine Position oben (unverändert), 0,5m bekommt den
+  // bisher unteren Strobo dazu. Keine neue Traverse nötig — beide Pfosten stehen wegen der Köpfe
+  // schon da.
+  const STROBE_TIERS_4_SPLIT = {
+    4: { 'left-1': ['top'], 'right-1': ['top'], 'left-0.5': ['only'], 'right-0.5': ['only'] },
+  };
+  // Sonderfall: 4 Moving Heads + 8 Strobo (ohne Wall Washer). Standard waere 1,5m (3 Strobos) + 1m
+  // (1 Strobo). Auf der zweiten Traverse sitzen aber nur 1 Kopf + 1 Strobo — dafuer reicht die
+  // kleinste Traverse (0,5m), eine 1m-Traverse ist unnoetig.
+  const STROBE_TIERS_8_4HEADS = {
+    8: { 'left-1.5': ['top', 'middle', 'bottom'], 'right-1.5': ['top', 'middle', 'bottom'], 'left-0.5': ['only'], 'right-0.5': ['only'] },
+  };
+  // Sonderfall OHNE Moving Head, NUR mit Wall Washer + Strobo: die 1,5m-Traverse steht durch den Wall
+  // Washer ohnehin schon — Strobos füllen sie zuerst komplett (Mitte, dann oben+unten, dann alle drei
+  // Positionen), bevor überhaupt eine weitere Traverse nötig wird. Erst ab 8 Strobos reicht die 1,5m-
+  // Traverse nicht mehr; dann kommt zusätzlich eine 1m-Traverse mit je 2 Strobos dazu (1,5m dabei auf
+  // 2 Strobos reduziert, da sie den Wall Washer außerdem noch trägt).
+  const STROBE_TIERS_WW_NOHEAD = {
+    2: { 'left-1.5': ['middle'], 'right-1.5': ['middle'] },
+    4: { 'left-1.5': ['top', 'bottom'], 'right-1.5': ['top', 'bottom'] },
+    6: { 'left-1.5': ['top', 'middle', 'bottom'], 'right-1.5': ['top', 'middle', 'bottom'] },
+    8: { 'left-1.5': ['top', 'bottom'], 'right-1.5': ['top', 'bottom'], 'left-1': ['top', 'bottom'], 'right-1': ['top', 'bottom'] },
+  };
+  // Sonderfall: genau 2 Moving Heads + Wall Washer (mindestens 2) + bis zu 6 Strobo: alles zusammen auf
+  // die 1,5m-Traverse (Kopf oben, Wall Washer, Strobos je nach Anzahl mittig / oben+unten / alle drei
+  // Positionen) — die 0,5m- bzw. 1m-Traverse wird dafür nicht gebraucht. Auf die 1,5m-Traverse passen
+  // maximal 3 Strobos; sobald mehr als 2 Moving Heads gewählt werden, reicht eine Traverse nicht mehr.
+  const STROBE_TIERS_2HEADS_WW_ALLIN15 = {
+    2: { 'left-1.5': ['middle'], 'right-1.5': ['middle'] },
+    4: { 'left-1.5': ['top', 'bottom'], 'right-1.5': ['top', 'bottom'] },
+    6: { 'left-1.5': ['top', 'middle', 'bottom'], 'right-1.5': ['top', 'middle', 'bottom'] },
+  };
+  // Feste Prozent-Positionen je Slot-Name (oben tiefer gesetzt, damit es nicht in den Moving Head reinragt;
+  // Mitte liegt genau zwischen oben und unten)
+  const STROBE_POS_PCT = { top: 24, middle: 54, bottom: 84, only: 50 };
+
+  const TRUSS_IMG = { 0.5: photos.truss05, 1.0: photos.truss10, 1.5: photos.truss15 };
+
+  // ===================== SVG-Bühne: alles über feste Koordinaten, kein CSS-Positionsraten mehr =====================
+  const STAGE_W = 700, STAGE_H = 420, FLOOR_Y = 340, CENTER_X = 350;
+
+  // Ein <image> (oder Platzhalter-Rechteck) an einer exakten Position, optional gedreht um einen Punkt.
+  // Registry-basierte Neu/Verschoben/Entfernt-Erkennung: jedes svgImg() bekommt einen stabilen "regKey"
+  // (z.B. "head:left-1"). Vergleich mit dem Registry-Stand des letzten Renders zeigt automatisch:
+  // - neu (Key gab es vorher nicht) → kurzes Aufhellen desselben Bildes
+  // - verschoben (Key gab es, aber an anderer Stelle/Drehung — z.B. wenn eine Traverse durch
+  //   Kompression den Rang wechselt) → wird wie "entfernt" behandelt, damit nichts instantan an die
+  //   neue Stelle springt, während ein Geschwisterteil an der alten Stelle noch ausblendet
+  // - entfernt (Key jetzt komplett weg) → wird mit alten Bild-Daten weiter gerendert und ausgeblendet
+  // Damit beim Umbau nichts "in der Luft hängt": alles Neue/Verschobene erscheint ERST in einer zweiten
+  // Render-Phase, nachdem die erste Phase (nur Ausblenden, alles Unveränderte bleibt einfach stehen)
+  // abgeschlossen ist. phase1Parts sammelt dafür die Beiträge, die schon in Phase 1 gezeigt werden dürfen.
+  let currentRegistry = {};
+  let prevRegistry = {};
+  // Aufhellen darf NUR passieren, wenn der Nutzer etwas hinzugefuegt hat. Beim Entfernen baut sich
+  // das Layout teils ebenfalls um (z.B. wechselt die Strobo-Verteilung) — sonst blitzen dabei
+  // faelschlich Teile als "neu" auf.
+  let flashAllowed = false;
+  let prevScaleLabel = null;   // fuer das Aufblitzen der Massskala nur bei echter Aenderung
+  let phase1Parts = [];
+  let stagePhaseTimer = null;
+
+  function posChanged(a, b){
+    return Math.abs((a.x || 0) - b.x) > 0.5 || Math.abs((a.y || 0) - b.y) > 0.5 || (a.rotateDeg || 0) !== (b.rotateDeg || 0);
+  }
+
+  function svgImg(regKey, src, alt, x, y, w, h, rotateDeg, pivot, flashStrong, flipH){
+    const prevP = regKey ? prevRegistry[regKey] : null;
+    if(regKey) currentRegistry[regKey] = { src, alt, x, y, w, h, rotateDeg, pivot, flipH };
+    const isNew = flashAllowed && !!regKey && !prevP;
+    // Generelle Regel: ALLES verhaelt sich bei einer Positionsaenderung gleich (egal ob Traverse,
+    // Strobo, Strahler, Wallwasher oder Moving Head) — beim Umbau blendet die alte Position aus,
+    // erst danach erscheint die neue. So bleibt die gesamte Szene synchron; ein Sonderweg fuer
+    // Moving Heads (sofortiges Springen ohne Fade) hat frueher dazu gefuehrt, dass Koepfe "vorzeitig"
+    // an der neuen Stelle auftauchten, waehrend der Rest der Szene noch aus-/einblendete.
+    const moved = !!prevP && (posChanged(prevP, { x, y, rotateDeg }) || !!prevP.flipH !== !!flipH);
+    const px = pivot ? pivot.x : (x + w / 2);
+    const py = pivot ? pivot.y : (y + h / 2);
+    // Spiegelung (horizontal, um die eigene Mitte) UND Drehung kombinieren: erst spiegeln, dann drehen —
+    // damit "zeigt zur Mitte" (Spiegeln) unabhaengig von einer zusaetzlichen Rotation funktioniert.
+    const flipTf = flipH ? `translate(${2 * (x + w / 2)} 0) scale(-1 1) ` : '';
+    const rotTf = rotateDeg ? `rotate(${rotateDeg} ${px} ${py}) ` : '';
+    const tf = (flipTf || rotTf) ? ` transform="${rotTf}${flipTf}"` : '';
+    const groupRot = tf;
+    const safeAlt = String(alt).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const imageMarkup = src
+      ? `<image href="${src}" xlink:href="${src}" x="${x}" y="${y}" width="${w}" height="${h}"><title>${safeAlt}</title></image>`
+      : `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="rgba(255,255,255,.05)" stroke="rgba(255,255,255,.18)" stroke-dasharray="3,3"><title>${safeAlt} — Foto folgt</title></rect>`;
+    // Aufleucht-Effekt beim Hinzufügen: dasselbe Bild noch einmal, aufgehellt, kurz sichtbar und dann
+    // ausgeblendet — hat dadurch exakt dieselbe Kontur wie das Originalbild, kein künstlicher Rahmen.
+    const flashMarkup = (isNew && src) ? `<image class="lk-flash-image" filter="url(#${flashStrong ? 'lkBrightenStrong' : 'lkBrighten'})" href="${src}" xlink:href="${src}" x="${x}" y="${y}" width="${w}" height="${h}"/>` : '';
+    const group = `<g${groupRot}>${imageMarkup}${flashMarkup}</g>`;
+    if(!isNew && !moved) phase1Parts.push(group); // unverändert: darf schon in Phase 1 gezeigt werden
+    return group;
+  }
+
+  // Baut das Ausblenden-Overlay für Teile, die im letzten Render noch da waren, jetzt aber entweder
+  // komplett weg sind ODER sich (Position/Drehung/Spiegelung) verändert haben — gerendert mit ihren
+  // ALTEN Bild-Daten, damit es exakt so aussieht wie das verschwindende/verschobene Teil selbst, nur
+  // langsam transparent werdend statt abrupt weg oder instantan springend.
+  function buildFadeOutMarkup(){
+    let out = '';
+    Object.keys(prevRegistry).forEach(key => {
+      const p = prevRegistry[key];
+      if(!p.src) return; // Platzhalter ohne Foto nicht extra ausfaden
+      const cur = currentRegistry[key];
+      if(cur && !posChanged(p, cur) && !!p.flipH === !!cur.flipH) return; // unverändert — kein Fade nötig
+      const px = p.pivot ? p.pivot.x : (p.x + p.w / 2);
+      const py = p.pivot ? p.pivot.y : (p.y + p.h / 2);
+      // Spiegelung MUSS mit uebernommen werden (gleiche Transform-Kette wie in svgImg): sonst blendet
+      // ein gespiegelter Moving Head ungespiegelt aus und wirkt, als wuerde er sich kurz drehen.
+      const fFlip = p.flipH ? `translate(${2 * (p.x + p.w / 2)} 0) scale(-1 1) ` : '';
+      const fRot = p.rotateDeg ? `rotate(${p.rotateDeg} ${px} ${py}) ` : '';
+      const rot = (fFlip || fRot) ? ` transform="${fRot}${fFlip}"` : '';
+      out += `<g class="lk-fade-out"${rot}><image href="${p.src}" xlink:href="${p.src}" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}"/></g>`;
+    });
+    return out;
+  }
+
+  // ---- Feste Slot-Positionen für die kleine Bühne (1–6 Moving Heads), außen → innen ----
+  // Reihenfolge je Seite immer: 1,5m außen · 1,0m Mitte · 0,5m innen (dicht am DJ-Pult)
+  // Positionen NACH RANG (0=am weitesten außen, 2=am weitesten innen), nicht mehr fest an eine
+  // Traversenlänge gebunden — dadurch rückt z.B. die 1,5m-Traverse automatisch eine Stufe nach innen,
+  // wenn die 1m-Traverse gerade nicht gebraucht wird (keine Lücke), und wieder raus, sobald sie zurückkommt.
+  const POSITION_X = {
+    left:  [175, 218, 259],
+    right: [525, 482, 441],
+  };
+  const SLOT_BY_LEN = { 1.5: 'outer', 1.0: 'middle', 0.5: 'inner' };
+
+  // ---- Gestaffelte Tiefe: die GROSSE (1,5m) Traverse steht am weitesten vorne (groß/tief),
+  // die KLEINE (0,5m) auf Höhe des DJ-Pults, also weiter hinten (klein/hoch) ----
+  const DEPTH = {
+    outer:  { scale: 1.00, lift: 0 },   // 1,5m — am weitesten vorne
+    middle: { scale: 0.985, lift: 13 }, // 1,0m — dazwischen
+    inner:  { scale: 0.97, lift: 24 },  // 0,5m — auf Höhe des Pults, am weitesten hinten
+  };
+  // Moving Heads bekommen eine deutlich stärkere Tiefen-Skalierung als der Rest (Traverse etc.),
+  // damit der Größenunterschied "näher = größer" realistischer wirkt.
+  const MH_DEPTH_SCALE = { outer: 1.09, middle: 0.96, inner: 0.87 };  // 1m und 0,5m Traverse etwas kleiner fuer staerkeren 3D-Effekt
+
+  const RANK_SLOT = ['outer', 'middle', 'inner']; // Rang 0/1/2 → Tiefen-Konfiguration
+
+  function svgPole(len, side, slotX, rank, filledPositions, hasStrahler, hasWallwasher, hasMovingHead, hasStrahlerOpp, strahlerInnerCount, outerFree){
+    const poleKey = `${side}-${len}`;
+    const slot = RANK_SLOT[rank];
+    const { scale: k, lift } = DEPTH[slot];
+    const localFloorY = FLOOR_Y - lift;
+    const truss = { w: TRUSS_SIZE[len].w * k, h: TRUSS_SIZE[len].h * k };
+    const trussX = slotX - truss.w / 2;
+    // Traverse steht direkt auf der (gestaffelten) Bodenlinie — kein reservierter Abstand mehr,
+    // der Strahler sitzt stattdessen dahinter/darunter versteckt (siehe unten).
+    const trussY = localFloorY - truss.h;
+    let out = '';
+
+    // Parstrahler ZUERST zeichnen (= hintere Ebene), damit die Traverse optisch darüber liegt und der
+    // Strahler wie in echt "in" der Traverse steht, statt frei davor zu schweben. Höhe = Höhe der Traverse
+    // (wie in der Vorlage — deutlich sichtbar, nicht mehr winzig), strahlt nach oben → Schrägansicht-Foto.
+    if(hasStrahler){
+      const stW = truss.w * 0.78; // etwas schmäler als vorher (0.9 → 0.78)
+      const p = { w: stW, h: stW / RATIO.strahlerAngled };
+      out += svgImg(`strahler:${poleKey}`, photos.strahlerAngled, 'Parstrahler', slotX - p.w / 2, localFloorY - p.h, p.w, p.h, 0, null, true); // staerkeres Aufblinken: sitzt halb hinter der Traverse und geht sonst leicht unter
+    }
+
+    // Traverse (überlappt jetzt den unteren Teil des Strahlers)
+    out += svgImg(`truss:${poleKey}`, TRUSS_IMG[len], `Traverse ${len}m`, trussX, trussY, truss.w, truss.h);
+
+    // Moving Head oben drauf (nur wenn dieser Pfosten wirklich einen bekommen hat — sonst bleibt er
+    // oben leer und trägt nur Strobe/Strahler/Wallwasher). Eigene, stärkere Tiefen-Skalierung für
+    // realistischere Perspektive (näher = größer).
+    if(hasMovingHead){
+      const mhK = MH_DEPTH_SCALE[slot] * 0.92;   // insgesamt etwas kleiner
+      const mh = { w: SIZE.movingHead.w * mhK, h: SIZE.movingHead.h * mhK };
+      out += svgImg(`head:${poleKey}`, photos.movingHead, 'Moving Head', slotX - mh.w / 2, trussY - mh.h + 6 * mhK, mh.w, mh.h, 0, null, false, side === 'right');  // weniger tief in der Traverse (14 -> 6); rechte Seite gespiegelt, damit der Kopf zur Buehnenmitte zeigt
+    }
+
+    // Strobes: immer auf der AUSSENSEITE der Traverse (Richtung Boxen, weg von der Bühnenmitte) —
+    // spiegelbildlich je Seite, komplett innerhalb der eigenen Traversenbreite.
+    filledPositions.forEach(pos => {
+      const s = { w: SIZE.strobeSmall.w * k, h: SIZE.strobeSmall.h * k };
+      const sY = trussY + (STROBE_POS_PCT[pos] / 100) * truss.h - s.h / 2;
+      const sX = side === 'left' ? trussX - s.w / 3 - k * 0.15 : trussX + truss.w - s.w * 2 / 3 + k * 0.15;  // etwas nach innen zurueckgenommen
+      out += svgImg(`strobe:${poleKey}:${pos}`, photos.strobe, 'Strobe', sX, sY, s.w, s.h);
+    });
+
+    // Zusaetzlicher Parstrahler auf 0,5m-Pfosten: gleiche Hoehe wie der (einzelne) Strobo, aber auf
+    // der gegenueberliegenden (Innen-)Seite der Traverse — nach vorne strahlendes Foto, da er seitlich
+    // an der Traverse haengt statt "in" ihr zu stehen.
+    if(hasStrahlerOpp){
+      // Echtes Mass (22cm Durchmesser) statt an der Strobo-Groesse haengend — dadurch ca. 1,7x groesser.
+      const pf = { w: SIZE.lichtAFront.w * k, h: SIZE.lichtAFront.h * k };
+      const pY = trussY + 0.26 * truss.h - pf.h / 2;
+      const pX = side === 'left' ? trussX + truss.w - pf.w - k * 0.25 : trussX + k * 0.25;
+      out += svgImg(`strahlerOpp:${poleKey}`, photos.strahlerFront, 'Parstrahler', pX, pY, pf.w, pf.h, 0, null, true);
+    }
+
+    // 1m-Traverse: bis zu 4 weitere Strahler — zwei Hoehen, je einer innen und einer aussen.
+    // Die beiden Aussenplaetze entfallen, wenn dort bereits Strobos haengen (outerFree === false);
+    // dann bleiben die 2 Innenplaetze.
+    if(strahlerInnerCount > 0){
+      const pf2 = { w: SIZE.lichtAFront.w * k, h: SIZE.lichtAFront.h * k };
+      // Zwei Hoehen im oberen/mittleren Bereich — darunter (ab ca. 72%) steht schon der
+      // angewinkelte Strahler im Fuss der Traverse.
+      const LEVEL_PCT = { top: 28, bottom: 56 };
+      const SLOTS = outerFree
+        ? [{ l:'top', f:'outer' }, { l:'top', f:'inner' }, { l:'bottom', f:'outer' }, { l:'bottom', f:'inner' }]
+        : [{ l:'top', f:'inner' }, { l:'bottom', f:'inner' }];
+      SLOTS.slice(0, strahlerInnerCount).forEach(spot => {
+        const pY = trussY + (LEVEL_PCT[spot.l] / 100) * truss.h - pf2.h / 2;
+        const pX = spot.f === 'inner'
+          ? (side === 'left' ? trussX + truss.w - pf2.w - k * 1.6 : trussX + k * 1.6)
+          : (side === 'left' ? trussX - pf2.w * 0.64 : trussX + truss.w - pf2.w * 0.36);
+        out += svgImg(`strahler1m:${poleKey}:${spot.l}:${spot.f}`, photos.strahlerFront, 'Parstrahler', pX, pY, pf2.w, pf2.h, 0, null, true);
+      });
+    }
+
+    // Moving Wall Washer (nur 1+2, auf der 1,5m-Traverse): immer auf der INNENSEITE, Richtung
+    // DJ-Pult/Bühnenmitte — spiegelbildlich je Seite, komplett innerhalb der eigenen Traversenbreite.
+    // MWW 3+4 landen jetzt immer auf dem Boden (siehe renderStage), nie auf der Traverse.
+    if(hasWallwasher){
+      const w = { w: SIZE.wallwasher.w * k, h: SIZE.wallwasher.h * k };
+      const wY = trussY + truss.h / 2 - w.h / 2;
+      const wX = side === 'left' ? trussX + truss.w - w.w - k * 0.25 + 2 : trussX + k * 0.25 - 5;  // links 2 nach rechts, rechts 5 nach links
+      out += svgImg(`wallwasher:${poleKey}`, photos.wallwasher, 'Moving Wall Washer', wX, wY, w.w, w.h);
+    }
+    return out;
+  }
+
+  // ---- Feste Rahmen-Geometrie für das Traversen-Gerüst (ab 7 Moving Heads) ----
+  const FRAME_W = 540, FRAME_H = Math.round(FRAME_W / RATIO.gantry), FRAME_X = (STAGE_W - FRAME_W) / 2, FRAME_Y = FLOOR_Y - FRAME_H;
+
+  // ---- Feste Positionsverteilung am Gerüst ----
+  // Symmetrische Auffuellreihenfolge (Anteil der nutzbaren Breite, 0 = links, 1 = rechts).
+  // Erst Mitte, dann nach aussen paarweise ergaenzen.
+  const SYMMETRIC_SPREAD = {
+    1: [0.50],
+    2: [0.30, 0.70],
+    3: [0.18, 0.50, 0.82],
+    4: [0.02, 0.35, 0.65, 0.98],
+    5: [0.02, 0.26, 0.50, 0.74, 0.98],
+    6: [0.02, 0.21, 0.40, 0.60, 0.79, 0.98],
+  };
+
+  // Liefert { svg, usedA } — usedA meldet zurueck, wie viele Parstrahler tatsaechlich am Gestell
+  // untergebracht wurden; der Rest erscheint unten als Ambientebeleuchtung.
+  function svgGantry(b, strobeCount, strahlerCount, wwCount){
+    // "behind" wird VOR dem Gestell-Bild gezeichnet -> die Geraete sitzen optisch IN der Traverse.
+    let behind = '';
+    let out = '';
+    let gantryUsedA = Math.min(strahlerCount, 4);
+
+    const TOP_BAR_Y = FRAME_Y + FRAME_H * 0.055;   // Oberkante der oberen Traverse
+    const legL = FRAME_X + FRAME_W * 0.075;        // Mitte linkes Standbein
+    const legR = FRAME_X + FRAME_W * 0.925;        // Mitte rechtes Standbein
+    // Die Traverse stammt aus einem 3D-Programm und wurde nicht exakt von vorne fotografiert,
+    // dadurch liegt dieselbe Stange oben/mitte/unten nicht auf derselben x-Koordinate. Deshalb hat
+    // jede Hoehe entlang jedes Standbeins eine eigene, unabhaengig verschiebbare Achse.
+    const AX_OUT_L = FRAME_X + FRAME_W * 0.02;    // Basis aussen links
+    const AX_OUT_R = FRAME_X + FRAME_W * 0.995;   // Basis aussen rechts
+    const AX_IN_L  = FRAME_X + FRAME_W * 0.075;   // Basis innen links
+    const AX_IN_R  = FRAME_X + FRAME_W * 0.94;    // Basis innen rechts
+    const AX_STROBE_TOP_L = AX_IN_L - 6;    // oberer Strobo links: nochmal 4 nach links
+    const AX_STROBE_TOP_R = AX_IN_R;        // oberer Strobo rechts
+    const AX_STROBE_BOT_L = AX_IN_L;        // unterer Strobo links
+    const AX_STROBE_BOT_R = AX_IN_R - 3;    // unterer Strobo rechts: 3 nach links
+    const AX_STRAHLER_TOP_L = AX_OUT_L - 1;     // Strahler oben links: 1 nach links
+    const AX_STRAHLER_TOP_R = AX_OUT_R - 2;     // Strahler oben rechts: nochmal 1 nach links
+    const AX_STRAHLER_BOT_L = AX_OUT_L + 2; // Strahler unten links: nochmal 1 nach rechts
+    const AX_STRAHLER_BOT_R = AX_OUT_R - 7; // Strahler unten rechts: nochmal 2 nach links
+    const AX_STRAHLER_MID_L = AX_IN_L - 2;  // Strahler Mitte links: nochmal 1 nach links
+    const AX_STRAHLER_MID_R = AX_IN_R - 1;      // Strahler Mitte rechts: 1 nach links
+
+    // ---------- Parstrahler 1-4: sitzen IN der Traverse (hintere Ebene, Schraegansicht-Foto) ----------
+    const pAng = { w: SIZE.lichtAAngled.w * 1.45, h: SIZE.lichtAAngled.h * 1.45 };
+    const footY = FLOOR_Y - pAng.h - FRAME_H * 0.055;   // hoeher gesetzt: steht in der Traverse statt davor
+    const cornerY = FRAME_Y + FRAME_H * 0.055 - 10;   // 10 nach oben
+    const footLX = legL + FRAME_W * 0.014 - 15;   // 15 nach aussen (links)
+    if(strahlerCount >= 1) behind += svgImg('gpar:1', photos.strahlerAngled, 'Parstrahler', footLX - pAng.w / 2, footY, pAng.w, pAng.h, 0, null, true);
+    if(strahlerCount >= 2) behind += svgImg('gpar:2', photos.strahlerAngled, 'Parstrahler', legR + 15 - pAng.w / 2, footY, pAng.w, pAng.h, 0, null, true);   // 15 nach aussen (rechts)
+    // Obere Ecken: eingedreht, damit die Leuchtflaeche in die Traverse hinein zeigt
+    if(strahlerCount >= 3) behind += svgImg('gpar:3', photos.strahlerAngled, 'Parstrahler', legL - 15 - pAng.w / 2, cornerY, pAng.w, pAng.h, 90, { x: legL - 15, y: cornerY + pAng.h / 2 }, true);   // 15 nach aussen (links)
+    if(strahlerCount >= 4) behind += svgImg('gpar:4', photos.strahlerAngled, 'Parstrahler', legR + 15 - pAng.w / 2, cornerY, pAng.w, pAng.h, -90, { x: legR + 15, y: cornerY + pAng.h / 2 }, true);   // 15 nach aussen (rechts)
+
+    // ---------- Das Gestell selbst ----------
+    out += svgImg('gantry', photos.gantry, 'Traversen-Gerüst', FRAME_X, FRAME_Y, FRAME_W, FRAME_H);
+
+    // ---------- Moving Heads: haengen unter der oberen Traverse ----------
+    const headY = FRAME_Y + FRAME_H * 0.11;
+    const headMarginBase = FRAME_W * 0.145;
+    const headMargin = headMarginBase + (8 - Math.min(b, 8)) * FRAME_W * 0.012;
+    const headSpan = FRAME_W - 2 * headMargin;
+    const headStep = b > 1 ? headSpan / (b - 1) : 0;
+    for(let i = 0; i < b; i++){
+      const cx = b > 1 ? FRAME_X + headMargin + i * headStep : FRAME_X + FRAME_W / 2;
+      const mh = SIZE.movingHead;
+      const flip = i < b / 2;   // linke Haelfte gespiegelt, rechte Haelfte bleibt so -> alle zeigen zur Mitte
+      out += svgImg(`ghead:${i}`, photos.movingHead, 'Moving Head (hängend)', cx - mh.w / 2, headY, mh.w, mh.h, 180, { x: cx, y: headY + mh.h / 2 }, false, flip);
+    }
+
+    // ---------- Strobos ----------
+    // Oben: liegend (90 Grad gedreht), Unterkante knapp ueber der Oberkante der oberen Traverse.
+    // Verteilung 1 = Mitte, 2..5 symmetrisch; ab 6 kommen welche seitlich an die Standbeine dazu.
+    const s = SIZE.strobeSmall;
+    const strobeTopY = TOP_BAR_Y - s.w - FRAME_H * 0.045 - 5;   // gedreht -> die Breite ist die sichtbare Hoehe; obere rote Linie, 5 nach oben
+    let topStrobes = strobeCount, bottomPerSide = 0;
+    if(strobeCount === 6){ topStrobes = 4; bottomPerSide = 1; }
+    else if(strobeCount === 7){ topStrobes = 5; bottomPerSide = 1; }
+    else if(strobeCount === 8){ topStrobes = 4; bottomPerSide = 2; }
+    const strobeSpread = SYMMETRIC_SPREAD[topStrobes] || [];
+    const strobeMargin = FRAME_W * 0.035;   // weiter nach aussen
+    const strobeSpan = FRAME_W - 2 * strobeMargin;
+    const strobeTopCXs = [];
+    // Einzelne Korrekturen fuer bestimmte Positionen (Schluessel "AnzahlOben:Index"), z.B. weil die
+    // Traverse an der Stelle leicht schraeg im Foto steht.
+    const TOP_STROBE_FIX = { '4:3': { dx: -7, rot: 0.3 } };
+    strobeSpread.forEach((frac, i) => {
+      const fix = TOP_STROBE_FIX[`${topStrobes}:${i}`] || { dx: 0, rot: 0 };
+      const cx = FRAME_X + strobeMargin + frac * strobeSpan + fix.dx;
+      const cy = strobeTopY + s.w / 2;
+      strobeTopCXs.push(cx);
+      out += svgImg(`gstrobe:top@${Math.round(cx)}`, photos.strobe, 'Strobe', cx - s.w / 2, cy - s.h / 2, s.w, s.h, 90 + fix.rot, { x: cx, y: cy });
+    });
+    // Seitlich an den Standbeinen (aufrecht), mit mehr Abstand zueinander — oben und unten je eigene
+    // Achse (siehe AX_STROBE_TOP_*/BOT_* weiter oben, wegen der leichten Drehung im Foto)
+    const bottomYs = [FRAME_H * 0.22, FRAME_H * 0.72];
+    const legStrobeX = [
+      { l: AX_STROBE_TOP_L, r: AX_STROBE_TOP_R },
+      { l: AX_STROBE_BOT_L, r: AX_STROBE_BOT_R },
+    ];
+    for(let n = 0; n < bottomPerSide; n++){
+      const yPos = FRAME_Y + bottomYs[n];
+      // Der untere linke Strobo braucht eine minimale Drehung, damit er gerade auf der (im 3D-Foto
+      // leicht schraeg stehenden) Traverse sitzt.
+      const rotL = (n === 1) ? -0.4 : 0;
+      out += svgImg(`gstrobe:botL:${n}`, photos.strobe, 'Strobe', legStrobeX[n].l - s.w / 2, yPos, s.w, s.h, rotL);
+      out += svgImg(`gstrobe:botR:${n}`, photos.strobe, 'Strobe', legStrobeX[n].r - s.w / 2, yPos, s.w, s.h);
+    }
+
+    // Geometrie der oberen Wall Washer wird schon hier gebraucht (die Strahler auf der Traverse
+    // richten sich danach aus) — die Wall Washer selbst werden weiter unten gezeichnet.
+    const wwThinTop = SIZE.wallwasher.w * 0.85;
+    const wwYTop = TOP_BAR_Y - FRAME_H * 0.012 - 10;   // untere rote Linie, 10 nach oben
+
+    // ---------- Parstrahler ab Nr. 5: leuchten nach vorne (Frontalansicht-Foto) ----------
+    // Positionen laut Einzeichnung:
+    //  - an den Standbeinen jeweils auf GLEICHER HOEHE wie die seitlichen Strobos, aber auf der
+    //    gegenueberliegenden (aeusseren) Seite des Fusses
+    //  - zusaetzlich eine Reihe auf der oberen Traverse, jeweils zwischen den Strobo-Positionen
+    // Reihenfolge: immer paarweise links/rechts, damit es symmetrisch bleibt.
+    if(strahlerCount > 4){
+      const pf = { w: FRAME_W * 0.052, h: (FRAME_W * 0.052) / RATIO.strahlerFront };
+      const outerL = FRAME_X + FRAME_W * 0.038;
+      const outerR = FRAME_X + FRAME_W * 0.962;
+      const yTopStrobe = FRAME_Y + bottomYs[0] + s.h / 2 - pf.h / 2;   // Mitte des oberen Strobos
+      const yBotStrobe = FRAME_Y + bottomYs[1] + s.h / 2 - pf.h / 2;   // Mitte des unteren Strobos
+      // Innenseite der Standbeine, mittig zwischen den beiden seitlichen Strobos
+      const yMidLeg = (yTopStrobe + yBotStrobe) / 2;
+      const barStrahlerY = strobeTopY + (s.w - pf.h) / 2;   // gleiche Hoehe wie die Strobo-Reihe
+
+      // ---- Plaetze auf der oberen Traverse ----
+      // Die Strahler bilden eine gleichmaessig verteilte, zueinander zentrierte Reihe (wie die
+      // Strobos): je mehr dazukommen, desto enger ruecken sie zusammen. Sind Strobos vorhanden,
+      // wird die groesste Anzahl gewaehlt, bei der KEIN Strahler mit einem Strobo kollidiert —
+      // dadurch entfallen nur so viele Strahler wie noetig, statt pauschal ganze Paare.
+      const cxs = strobeTopCXs.slice().sort((p, q) => p - q);
+      const barNeed = pf.w / 2 + s.h / 2 + 3;   // s.h = sichtbare Breite des gedrehten Strobos
+      const barLeft = FRAME_X + FRAME_W * 0.045;   // weiter nach aussen
+      const barRight = FRAME_X + FRAME_W * 0.955;   // weiter nach aussen
+      const barPitch = pf.w + 6;   // Mindestabstand zweier Strahler zueinander
+
+      // Die freien Abschnitte der Traverse ergeben sich aus den Luecken zwischen (und neben) den
+      // Strobos. In jedem Abschnitt werden die Strahler gleichmaessig verteilt; die Abschnitte werden
+      // symmetrisch (paarweise von aussen nach innen) befuellt, damit die Reihe zentriert bleibt.
+      const blocked = cxs.map(cx => [cx - barNeed, cx + barNeed]);
+      const segs = [];
+      let cur = barLeft;
+      blocked.forEach(([bl, br]) => {
+        if(bl > cur) segs.push([cur, Math.min(bl, barRight)]);
+        cur = Math.max(cur, br);
+      });
+      if(cur < barRight) segs.push([cur, barRight]);
+      const segList = segs
+        .map(([l, r]) => ({ l, r, w: r - l }))
+        .filter(sg => sg.w >= pf.w)
+        .map(sg => ({ ...sg, cap: Math.max(1, Math.floor(sg.w / barPitch)) }));
+
+      let barBudget = Math.max(0, strahlerCount - 10);
+      const counts = segList.map(() => 0);
+      // Paarweise von aussen nach innen auffuellen (Mittelabschnitt zuletzt), damit es symmetrisch bleibt
+      let added = true;
+      while(added && barBudget > 0){
+        added = false;
+        for(let i = 0, j = segList.length - 1; i <= j; i++, j--){
+          if(i === j){
+            if(barBudget >= 1 && counts[i] < segList[i].cap){ counts[i]++; barBudget--; added = true; }
+          } else if(barBudget >= 2 && counts[i] < segList[i].cap && counts[j] < segList[j].cap){
+            counts[i]++; counts[j]++; barBudget -= 2; added = true;
+          }
+          if(barBudget <= 0) break;
+        }
+      }
+      const barSpots = [];
+      segList.forEach((sg, i) => {
+        const k = counts[i];
+        for(let n = 0; n < k; n++) barSpots.push(sg.l + sg.w * (n + 0.5) / k);
+      });
+      barSpots.sort((p, q) => p - q);
+
+      // 4 statt bisher 3 gleichmäßig verteilte Höhen pro Bein — schafft zwei zusätzliche Plätze und
+      // sorgt gleichzeitig dafür, dass der Abstand zwischen allen Strahlern übereinander gleich bleibt.
+      // Reicht minimal über die bisherige "oben"-Position hinaus nach oben hinaus (mehr Platz).
+      const legTop = yTopStrobe - 18;
+      const legBottom = yBotStrobe;
+      const legLevelY = [0, 1, 2, 3].map(i => legTop + (legBottom - legTop) * i / 3);
+
+      const frontSpots = [
+        { x: AX_STRAHLER_TOP_L, y: legLevelY[0], rot: 90 },  // 5  oben links
+        { x: AX_STRAHLER_TOP_R, y: legLevelY[0], rot: 90 },  // 6  oben rechts
+        { x: AX_STRAHLER_MID_L, y: legLevelY[1], rot: 90 },  // 7  Mitte-oben links
+        { x: AX_STRAHLER_MID_R, y: legLevelY[1], rot: 90 },  // 8  Mitte-oben rechts
+        { x: AX_STRAHLER_MID_L, y: legLevelY[2], rot: 90 },  // 9  Mitte-unten links
+        { x: AX_STRAHLER_MID_R, y: legLevelY[2], rot: 90 },  // 10 Mitte-unten rechts
+        { x: AX_STRAHLER_BOT_L, y: legLevelY[3], rot: 90 },  // 11 unten links
+        { x: AX_STRAHLER_BOT_R, y: legLevelY[3], rot: 90 },  // 12 unten rechts
+        ...barSpots.map(x => ({ x, y: barStrahlerY, rot: 0 })),    // ab 13: obere Traverse
+      ];
+      gantryUsedA = 4 + Math.min(Math.max(0, strahlerCount - 4), frontSpots.length);
+      for(let n = 5; n <= gantryUsedA; n++){
+        const spot = frontSpots[n - 5];
+        const pivot = spot.rot ? { x: spot.x, y: spot.y + pf.h / 2 } : null;
+        // Schluessel ueber die Position (nicht ueber die laufende Nummer): kommt ein Platz in der Mitte
+        // dazu, verschieben sich sonst alle Nummern und ein bereits vorhandener Strahler wuerde
+        // faelschlich als "neu" aufblitzen.
+        const key = spot.rot ? `gpar:leg:${n}` : `gpar:bar:${n - 11}`;   // Index statt Position: beim Enger-Ruecken der Reihe gilt ein Strahler als verschoben, nicht als neu
+        out += svgImg(key, photos.strahlerFront, 'Parstrahler', spot.x - pf.w / 2, spot.y, pf.w, pf.h, spot.rot, pivot, true);
+      }
+    }
+
+    // ---------- Moving Wall Washer ----------
+    // Liegend auf dem OBEREN Teil der oberen Traverse, ueber die volle Breite verteilt.
+    //   1 -> Mitte · 2 -> weit links + weit rechts · 3 -> links, rechts, Mitte
+    //   4 -> 2 aussen oben + je 1 laengs an den Standbeinen
+    const wwLen = FRAME_W * 0.26;
+    const wwThin = wwThinTop;
+    const wwY = wwYTop;                            // mittig auf der oberen Stange
+    // Feste Slots statt fortlaufender Index: dadurch behaelt ein bereits platzierter Wall Washer
+    // seinen Platz, wenn ein weiterer dazukommt (sonst "wandert" er und blinkt faelschlich als neu auf).
+    // Slot-Position als Anteil der gesamten Rahmenbreite (0 = linke Kante, 1 = rechte Kante).
+    // Rechts sitzt bewusst weiter aussen als links (Vorgabe aus der Einzeichnung).
+    // Bei nur zwei Wall Washern duerfen beide weiter nach innen; erst bei drei wird aussen Platz
+    // fuer den mittleren gebraucht.
+    const WW_SLOT_X_2 = { L: 0.18, M: 0.50, R: 0.8013 };   // rechts nochmal 5 nach links
+    const WW_SLOT_X_3 = { L: 0.137, M: 0.50, R: 0.8913 };   // links 20 nach rechts (hing aus der Traverse raus)
+    const wwTopCountNow = wwCount >= 4 ? 2 : wwCount;
+    const WW_SLOT_X = wwTopCountNow >= 3 ? WW_SLOT_X_3 : WW_SLOT_X_2;
+    const WW_SLOTS = { 1: ['M'], 2: ['L', 'R'], 3: ['L', 'R', 'M'] };
+    const wwSlots = WW_SLOTS[wwTopCountNow] || [];
+    wwSlots.forEach(slot => {
+      const cx = FRAME_X + WW_SLOT_X[slot] * FRAME_W;
+      out += svgImg(`gww:top:${slot}`, photos.wallwasher, 'Moving Wall Washer', cx - wwThin / 2, wwY - wwLen / 2 + wwThin / 2, wwThin, wwLen, 90, { x: cx, y: wwY });
+    });
+    if(wwCount >= 4){
+      // Die letzten beiden senkrecht an den Standbeinen — auf der AUSSENSEITE, also gegenueber der
+      // Seite, auf der die seitlichen Strobos sitzen (die haengen innen an legInnerL/legInnerR).
+      // Laenge (ca. 1m real) und Hoehe so gewaehlt, dass der Wall Washer genau in die Luecke zwischen
+      // den beiden seitlichen Strobo-Positionen passt.
+      const legOuterL = AX_OUT_L;
+      const legOuterR = AX_OUT_R;
+      const gapTop = FRAME_Y + bottomYs[0] + s.h;      // Unterkante des oberen seitlichen Strobos
+      const gapBottom = FRAME_Y + bottomYs[1];         // Oberkante des unteren seitlichen Strobos
+      const legLen = FRAME_H * 0.30;                   // feste Laenge (entspricht ca. 1m real)
+      const legTopY = gapTop + ((gapBottom - gapTop) - legLen) / 2;
+      // Leichte Drehung, weil die Standbeine im 3D-Foto perspektivisch nicht exakt senkrecht stehen
+      const legTiltL = -2, legTiltR = 1.5;
+      out += svgImg('gww:legL', photos.wallwasher, 'Moving Wall Washer', legOuterL - wwThin / 2, legTopY, wwThin, legLen, legTiltL, { x: legOuterL, y: legTopY + legLen / 2 });
+      out += svgImg('gww:legR', photos.wallwasher, 'Moving Wall Washer', legOuterR - wwThin / 2, legTopY, wwThin, legLen, legTiltR, { x: legOuterR, y: legTopY + legLen / 2 });
+    }
+
+    return { svg: behind + out, usedA: gantryUsedA };
+  }
+
+  let prevExtraCounts = null; // für das Aufleuchten der losen Geräte unten in der Liste (separates System)
+
+  // ============================================================================
+  // Koordinatengitter zum Feinabstimmen: zeichnet ein Raster mit Zahlen in exakt denselben
+  // SVG-Koordinaten, die im Code verwendet werden (x/y), damit sich Positionswünsche direkt als
+  // "verschiebe X bei x=320,y=140 um 10 nach links" formulieren lassen. Per Klick durch die
+  // Schrittweiten 40 -> 20 -> 10 -> 5 -> aus schalten, fuer grobe oder feine Orientierung.
+  // ============================================================================
+  const GRID_STEPS = [40, 20, 10, 5];
+  let gridStepIndex = -1;   // -1 = aus
+  function toggleCoordGrid(){
+    gridStepIndex++;
+    if(gridStepIndex >= GRID_STEPS.length) gridStepIndex = -1;
+    const btn = document.getElementById('gridToggleBtn');
+    const on = gridStepIndex >= 0;
+    btn.classList.toggle('is-active', on);
+    btn.textContent = on ? `Koordinaten: ${GRID_STEPS[gridStepIndex]}er` : 'Koordinaten anzeigen';
+    renderStage();
+  }
+  function buildCoordGridSvg(viewBoxValue){
+    if(gridStepIndex < 0) return '';
+    const step = GRID_STEPS[gridStepIndex];
+    const [vx, vy, vw, vh] = viewBoxValue.split(' ').map(Number);
+    const startX = Math.ceil(vx / step) * step;
+    const startY = Math.ceil(vy / step) * step;
+    const fontSize = step <= 10 ? 7 : 9;
+    let out = '<g class="lk-coord-grid" font-family="Segoe UI, Arial, sans-serif">';
+    for(let x = startX; x < vx + vw; x += step){
+      out += `<line x1="${x}" y1="${vy}" x2="${x}" y2="${vy + vh}" stroke="rgba(255,138,61,.35)" stroke-width="1"/>`;
+      out += `<text x="${x + 2}" y="${vy + 12}" font-size="${fontSize}" fill="rgba(255,138,61,.9)">${x}</text>`;
+    }
+    for(let y = startY; y < vy + vh; y += step){
+      out += `<line x1="${vx}" y1="${y}" x2="${vx + vw}" y2="${y}" stroke="rgba(255,138,61,.35)" stroke-width="1"/>`;
+      out += `<text x="${vx + 2}" y="${y - 2}" font-size="${fontSize}" fill="rgba(255,138,61,.9)">${y}</text>`;
+    }
+    out += '</g>';
+    return out;
+  }
+
+  // Setzt alle Auswahlen auf 0 zurueck und leert die Vorschau komplett.
+  function resetAllSelections(){
+    allItems.forEach(i => { state[i.id] = i.min; });
+    state.aAmbientManual = 0;
+    prevRegistry = {}; prevExtraCounts = null; prevScaleLabel = null; // kein Ausblenden/Aufblitzen beim Reset
+    renderCategories();
+    renderStage();
+    renderSummary();
+  }
+
+  // Verschiebt Parstrahler manuell zwischen Traverse und Ambientebeleuchtung. Reine Verschiebung
+  // (kein Hinzufuegen/Entfernen von Geraeten), daher hier kein Aufleucht-/Ausblend-Effekt.
+  function changeAmbientManual(dir){
+    const parItem = allItems.find(i => i.id === 'a');
+    if(dir < 0){
+      const next = state.aAmbientManual - 1;
+      if(next < 0) return;
+      state.aAmbientManual = next;
+      flashAllowed = false; // reine Verschiebung zurueck zur Traverse, kein echtes Entfernen
+      document.getElementById('ambientManualCount').textContent = next;
+      renderStage();
+      return;
+    }
+    // "+": Wenn noch Kapazitaet frei ist (Parstrahler, die schon gewaehlt aber noch nicht manuell
+    // in die Ambientebeleuchtung verschoben sind), einfach einen davon verschieben. Ist bereits alles
+    // verschoben, wird automatisch ein neuer Parstrahler dazugewaehlt — im selben Schrittmass wie der
+    // normale Stepper (2er-Paar bzw. je nach Situation 1er), damit die Parstrahler-Anzahl nie ungerade
+    // bzw. unsymmetrisch wird.
+    if(state.aAmbientManual < state.a){
+      state.aAmbientManual++;
+      flashAllowed = false;
+    } else {
+      const step = stepFor('a', 1);
+      const nextA = state.a + step;
+      if(nextA > parItem.max) return;
+      state.a = nextA;
+      state.aAmbientManual += step;
+      flashAllowed = true; // es kommt wirklich (mindestens) ein neuer Parstrahler dazu
+    }
+    document.getElementById('ambientManualCount').textContent = state.aAmbientManual;
+    renderCategories();
+    renderStage();
+    renderSummary();
+  }
+
+  function renderStage(){
+    const a = state.a, b = state.b, c = state.c, d = state.d, sub = state.sub, top = state.top, dj = state.dj;
+    currentRegistry = {}; // Registry für diesen Render neu aufbauen
+    phase1Parts = []; // Sammlung für die erste (unveränderte) Anzeige-Phase
+
+    // Vom Nutzer manuell in die Ambientebeleuchtung verschobene Parstrahler werden von vornherein
+    // aus der Traversen-Zuteilung herausgenommen (stehen aber unten in der Liste bereit).
+    state.aAmbientManual = Math.max(0, Math.min(state.aAmbientManual, a));
+    const ambientCountEl = document.getElementById('ambientManualCount');
+    if(ambientCountEl) ambientCountEl.textContent = state.aAmbientManual;
+    // Wie weit die Turmreihe pro Seite ohne DJ-Pult zusammengerueckt ist (0 = normale/aeussere
+    // Position mit DJ-Pult). Wird unten sowohl fuer die Tuerme selbst als auch fuer die
+    // Boden-Wallwasher (3+4) gebraucht, die sonst nicht mitwandern wuerden.
+    const RANK_SHIFT = (b <= 6 && dj <= 0) ? 58 : 0;
+    // Die Boden-Wallwasher (3+4) ruecken bewusst WENIGER weit nach innen als die Tuerme —
+    // sonst kreuzen sich ihre Innenspitzen in der Mitte.
+    const WW_FLOOR_SHIFT = (b <= 6 && dj <= 0) ? 30 : 0;
+    let remainingStrobes = c;
+    let remainingA = a - state.aAmbientManual;
+    let remainingD = d;
+    let svg = '';
+
+    // Sound: Subwoofer+Topteil-Stack — steht jetzt hinter dem gesamten Traversen-Aufbau (kleiner, weiter
+    // oben/hinten), deshalb ZUERST gezeichnet, damit die Traversen optisch davor stehen.
+    // Höhe/Größe aus der Nutzer-Markierung (orange), X-Position wie beschrieben: zwischen 0,5m- und 1m-Traverse.
+    const stackCount = Math.min(sub, top);
+    const soundTargetH = (293.33 - 130.83) * 1.2; // Größe passt laut Nutzer, unverändert
+    const innerLocalFloorY = FLOOR_Y - DEPTH.inner.lift; // gleiche Standhöhe wie die 0,5m-Traverse (unterster Punkt)
+    const soundTargetTopY = innerLocalFloorY - soundTargetH;
+    const soundW = soundTargetH * (SIZE.soundstack.w / SIZE.soundstack.h);
+    if(stackCount >= 1){
+      const cx = (POSITION_X.left[1] + POSITION_X.left[2]) / 2;
+      svg += svgImg('stack1', photos.soundstack, 'Sub + Top Tower', cx - soundW / 2, soundTargetTopY, soundW, soundTargetH);
+    }
+    if(stackCount >= 2){
+      const cx = (POSITION_X.right[1] + POSITION_X.right[2]) / 2;
+      svg += svgImg('stack2', photos.soundstack, 'Sub + Top Tower', cx - soundW / 2, soundTargetTopY, soundW, soundTargetH);
+    }
+
+    // Welche Traversen-TYPEN werden wirklich gebraucht? Nicht mehr sequenziell ("erst 1m, dann 1,5m,
+    // dann 0,5m"), sondern nur genau die, die von Moving Head, Strobo-Stufe oder Moving Wall Washer
+    // tatsächlich gebraucht werden. Parstrahler erzeugt für sich allein KEINE Traverse mehr — er nutzt
+    // nur Pfosten mit, die aus einem anderen Grund schon da sind.
+    if(b <= 6){
+      const wwKeys = new Set();
+      if(remainingD >= 1) wwKeys.add('left-1.5');
+      if(remainingD >= 2) wwKeys.add('right-1.5');
+
+      // Basis für die Kopf-Bevorzugung: die Pfosten, die UNABHÄNGIG von der Kopf-ANZAHL schon feststehen
+      // — also Wall Washer (immer) plus die Stroboskop-Tabelle, die für diese Kopf-Anzahl gelten würde.
+      // Nur der b===4-Fall wirkt sich aus: bei b=0/2 ueberschreiben WW_NOHEAD bzw. ALLIN15,
+      // bei b=6 greift die b!==6-Bedingung nicht.
+      const strobeTiers4WW = STROBE_TIERS_4_WW_4HEADS;
+      let neutralTierSet = STROBE_TIERS;
+      if(c === 6 && remainingD > 0) neutralTierSet = STROBE_TIERS_WITH_MWW;
+      if(c === 4 && remainingD >= 2) neutralTierSet = strobeTiers4WW;
+      if(b === 4 && c === 8 && remainingD < 2) neutralTierSet = STROBE_TIERS_8_4HEADS; // 4 Koepfe + 8 Strobo ohne WW: 1,5m + 0,5m statt 1,5m + 1m
+      if(b === 2 && remainingD >= 2 && c <= 6) neutralTierSet = STROBE_TIERS_2HEADS_WW_ALLIN15; // genau 2 Köpfe + Wall Washer (egal wie viele): bis 6 Strobo passt alles auf die 1,5m-Traverse, 0,5m/1m nicht nötig
+      const baseStrobeKeys = new Set(Object.keys(neutralTierSet[c] || {}));
+
+      let strobeTierSet = (b === 6 ? STROBE_TIERS_ALL_HEADS : STROBE_TIERS);
+      if(b !== 6 && c === 6 && remainingD > 0) strobeTierSet = STROBE_TIERS_WITH_MWW; // teilt sich die 1,5m mit MWW
+      if(b !== 6 && c === 4 && remainingD >= 2) strobeTierSet = strobeTiers4WW; // NUR wenn der Moving Wall Washer die 1,5m-Traverse ohnehin schon braucht: dann 1 Strobo dort mit unterbringen. Bei genau 4 Köpfen reicht dafür die 0,5m-Traverse (kleinste mögliche), sonst die 1m-Traverse. Ohne Wall Washer bleibt alles auf der 1m-Traverse (top+bottom) — keine 1,5m-Traverse nur für einen einzelnen Strobo aufbauen.
+      if(b === 4 && c === 4 && remainingD < 2) strobeTierSet = STROBE_TIERS_4_SPLIT; // 4 Köpfe, kein Wall Washer: Strobos auf 0,5m + 1m verteilen statt auf 1m stapeln
+      if(b === 0 && remainingD >= 2) strobeTierSet = STROBE_TIERS_WW_NOHEAD; // Ohne Moving Head: Strobos füllen zuerst die durch den Wall Washer ohnehin vorhandene 1,5m-Traverse komplett aus
+      if(b !== 6 && c === 8 && remainingD >= 2) strobeTierSet = STROBE_TIERS_WW_NOHEAD; // Bei 8 Strobo + Wall Washer immer 2+2 auf 1,5m/1m aufteilen — unabhängig von Moving Heads, außer bei 6 Köpfen (dort gilt immer die Standard-ALL_HEADS-Tabelle: 0,5m=1, 1,5m=3)
+      if(b === 2 && remainingD >= 2 && c <= 6) strobeTierSet = STROBE_TIERS_2HEADS_WW_ALLIN15; // genau 2 Köpfe + Wall Washer: Kopf + Wall Washer + bis zu 3 Strobos zusammen auf die 1,5m-Traverse — erst ab mehr als 2 Köpfen reicht eine Traverse nicht mehr
+      if(b === 4 && c === 8 && remainingD < 2) strobeTierSet = STROBE_TIERS_8_4HEADS; // 4 Koepfe + 8 Strobo ohne WW: zweite Traverse traegt nur 1 Kopf + 1 Strobo -> 0,5m reicht
+      const strobeTier = strobeTierSet[c] || {};
+      const strobeKeys = new Set(Object.keys(strobeTier));
+
+      // Moving Heads werden bevorzugt auf Pfosten gesetzt, die durch Strobo/Wallwasher ohnehin schon
+      // stehen — ein zusätzlicher Kopf löst dadurch KEINEN neuen Tower aus, solange oben noch Platz auf
+      // einem bestehenden Pfosten ist. Erst wenn alle bereits vorhandenen Pfosten schon einen Kopf tragen,
+      // wird in fester Reihenfolge (klein → groß, links → rechts) ein neuer Pfosten ergänzt. So bleiben
+      // bereits gerenderte Türme beim Hinzufügen weiterer Köpfe an ihrem Platz stehen.
+      const chosenPoles = [];
+      POLE_ORDER.forEach(p => {
+        if(chosenPoles.length >= b) return;
+        const key = `${p.side}-${p.len}`;
+        if(baseStrobeKeys.has(key) || wwKeys.has(key)) chosenPoles.push(p);
+      });
+      POLE_ORDER.forEach(p => {
+        if(chosenPoles.length >= b) return;
+        if(!chosenPoles.includes(p)) chosenPoles.push(p);
+      });
+      const headKeys = new Set(chosenPoles.map(p => `${p.side}-${p.len}`));
+
+      const unionKeys = new Set([...headKeys, ...strobeKeys, ...wwKeys]);
+      const activePoles = POLE_ORDER.filter(p => unionKeys.has(`${p.side}-${p.len}`));
+
+      // Strobes: feste Stufen-Belegung (2/4/6/8)
+      const poleStrobes = {};
+      Object.entries(strobeTier).forEach(([key, positions]) => {
+        poleStrobes[key] = positions;
+        remainingStrobes -= positions.length;
+      });
+
+      // Parstrahler: 1 pro tatsächlich vorhandenem Pfosten (nie eigens erzeugt)
+      // 1 Parstrahler pro Pfosten (angewinkelt, "in" der Traverse). Auf 0,5m-Pfosten passt zusätzlich
+      // noch einer auf der Höhe des Strobos, aber auf der gegenüberliegenden Seite — der wird separat
+      // in einem zweiten Durchgang vergeben (erst wenn alle Pfosten schon einen haben).
+      const poleHasStrahler = {};
+      activePoles.forEach(p => {
+        if(remainingA <= 0) return;
+        poleHasStrahler[`${p.side}-${p.len}`] = true;
+        remainingA--;
+      });
+      // Zusaetzlicher Parstrahler auf 0,5m-Pfosten, gegenueber vom Strobo. Gilt jetzt unabhaengig
+      // davon, ob ein DJ-Pult steht — durch den gleichmaessigen RANK_SHIFT ist auch in der
+      // zusammengerueckten Reihe genug Abstand zum Nachbarpfosten.
+      const poleHasStrahlerOpp = {};
+      activePoles.filter(p => p.len === 0.5).forEach(p => {
+        if(remainingA <= 0) return;
+        poleHasStrahlerOpp[`${p.side}-${p.len}`] = true;
+        remainingA--;
+      });
+      // 1m-Pfosten: 4 weitere Parstrahler — zwei Hoehen, je einer innen und einer aussen.
+      // Die beiden Aussenplaetze entfallen, wenn dort bereits Strobos haengen; dann bleiben
+      // die 2 Innenplaetze.
+      const pole1mOuterFree = {};
+      activePoles.filter(p => p.len === 1.0).forEach(p => {
+        const k2 = `${p.side}-${p.len}`;
+        pole1mOuterFree[k2] = !((poleStrobes[k2] || []).length);
+      });
+      const poleStrahlerInnerCount = {};
+      for(let slot = 0; slot < 4; slot++){
+        activePoles.filter(p => p.len === 1.0).forEach(p => {
+          if(remainingA <= 0) return;
+          const k2 = `${p.side}-${p.len}`;
+          const cap = pole1mOuterFree[k2] ? 4 : 2;
+          if((poleStrahlerInnerCount[k2] || 0) >= cap) return;
+          poleStrahlerInnerCount[k2] = (poleStrahlerInnerCount[k2] || 0) + 1;
+          remainingA--;
+        });
+      }
+
+      // Moving Wall Washer: nur 1+2 kommen auf die 1,5m-Traverse (Innenseite, Richtung DJ-Pult),
+      // 3+4 landen immer auf dem Boden vor dem Pult (siehe unten bei den Boden-MWW).
+      const poleHasWallwasher = {};
+      if(remainingD > 0){ poleHasWallwasher['left-1.5'] = true; remainingD--; }
+      if(remainingD > 0){ poleHasWallwasher['right-1.5'] = true; remainingD--; }
+
+      // Echte Moving Heads werden nach Rang vergeben — nur Pfosten, die auch in headKeys stehen.
+      // X-Position: pro Seite so, dass die innerste Position (Richtung Pult) der feste Anker ist —
+      // die kleinste vorhandene Traverse sitzt immer ganz innen, die nächstgrößere rückt eine Stufe
+      // weiter außen nach, usw. Fehlt z.B. die 1m-Traverse, rückt die 1,5m-Traverse eine Stufe nach
+      // innen, statt dass eine Lücke entsteht — die 0,5m-Traverse bleibt dabei unverändert am Platz.
+      // Ohne DJ-Pult (kein Platzbedarf in der Mitte) rückt die GESAMTE Turmreihe pro Seite geschlossen
+      // näher an die Mitte heran. Sobald ein DJ-Pult dazukommt, wandert die ganze Reihe wieder auf die
+      // äußere Ausgangsposition.
+      // Alle drei Raenge um denselben Betrag — nur so bleiben die Abstaende 0,5m<->1m und
+      // 1m<->1,5m gleich gross (43 / 41 px, exakt wie mit DJ-Pult).
+      const rankShiftByIdx = [RANK_SHIFT, RANK_SHIFT, RANK_SHIFT];
+      const rankX = {
+        left:  POSITION_X.left.map((x, idx) => x + rankShiftByIdx[idx]),
+        right: POSITION_X.right.map((x, idx) => x - rankShiftByIdx[idx]),
+      };
+      ['left', 'right'].forEach(sideName => {
+        const sidePoles = activePoles.filter(p => p.side === sideName).sort((x, y) => x.len - y.len);
+        sidePoles.forEach((spec, i) => {
+          const key = `${spec.side}-${spec.len}`;
+          const rank = 2 - i;
+          const slotX = rankX[sideName][rank];
+          svg += svgPole(spec.len, spec.side, slotX, rank, poleStrobes[key] || [], !!poleHasStrahler[key], !!poleHasWallwasher[key], headKeys.has(key), !!poleHasStrahlerOpp[key], poleStrahlerInnerCount[key] || 0, !!pole1mOuterFree[key]);
+        });
+      });
+    } else if(b >= 7){
+      // Ab dem 7. Moving Head: alle Türme verschwinden, alle Moving Heads hängen gemeinsam am Traversen-Gerüst.
+      const usedD = Math.min(remainingD, 4);
+      remainingD -= usedD;
+
+      const gantry = svgGantry(b, Math.min(remainingStrobes, 8), remainingA, usedD);
+      svg += gantry.svg;
+      remainingA -= gantry.usedA;   // uebrige Strahler erscheinen unten als Ambientebeleuchtung
+      remainingStrobes = 0; // im Gerüst-Modus passen immer alle 8 Strobes drauf
+    }
+
+    // (Sound-Stacks werden jetzt ganz am Anfang gezeichnet — siehe oben — damit sie hinter den Traversen liegen)
+
+    // DJ-Pult mittig — optisch vergrößert (Faktor 1.2) und weiter nach hinten (höher) gesetzt, damit der
+    // Abstand zur ersten Traverse in etwa dem Abstand zwischen den Traversen entspricht
+    if(dj > 0){
+      const djScale = 1; // kein kuenstlicher Schrumpf mehr — Skala soll die reale Groesse zeigen
+      const djW = SIZE.dj.w * djScale, djH = SIZE.dj.h * djScale;
+      svg += svgImg('dj', photos.djpult, 'DJ-Pult', CENTER_X - djW / 2, FLOOR_Y - djH - 35, djW, djH);
+    }
+
+    // Restliche Moving Wall Washer (3+4): exakte Linie nach Nutzer-Koordinaten (2. Korrektur per Raster).
+    // Start-/Endpunkt getauscht (statt gespiegelt) — dreht die Bildausrichtung um 180° entlang der Linie.
+    const wwFrontCount = Math.min(remainingD, 2);
+    remainingD -= wwFrontCount;
+    const wThin = 14;
+    function wwAlongLine(regKey, x1, y1, x2, y2){
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const angleDeg = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI + 90; // unrotiertes Bild zeigt nach oben (-90°)
+      return svgImg(regKey, photos.wallwasher, 'Moving Wall Washer', x1 - wThin / 2, y1 - len, wThin, len, angleDeg, { x: x1, y: y1 });
+    }
+    if(wwFrontCount >= 1) svg += wwAlongLine('wwfront1', 208 + WW_FLOOR_SHIFT, 338, 287 + WW_FLOOR_SHIFT, 307.5);
+    if(wwFrontCount >= 2) svg += wwAlongLine('wwfront2', 492 - WW_FLOOR_SHIFT, 338, 413 - WW_FLOOR_SHIFT, 307.5);
+
+    // ---- Massskala unter dem Aufbau ----
+    // Zeigt Breite und Hoehe des tatsaechlich aufgebauten Rigs. Alle Bildmasse leiten sich von
+    // PX_PER_METER ab, daher lassen sich die Meter direkt aus den Pixelmassen zurueckrechnen.
+    let scaleSvg = '';
+    (function drawScale(){
+      let x1, x2, topY, bottomY;
+      if(b >= 7){
+        x1 = FRAME_X; x2 = FRAME_X + FRAME_W; topY = FRAME_Y; bottomY = FLOOR_Y;
+      } else {
+        // Alle aufgebauten Teile beruecksichtigen (Traversen, Köpfe, DJ-Pult, Sound-Stack, ...) —
+        // die Skala misst IMMER vom tatsächlich untersten bis zum tatsächlich obersten Punkt dessen,
+        // was gerade zu sehen ist, nicht pauschal bis zur Bodenlinie (z.B. hängt das DJ-Pult höher).
+        const keys = Object.keys(currentRegistry);
+        if(!keys.length) return;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        keys.forEach(k => {
+          const p = currentRegistry[k];
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x + p.w);
+          minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y + p.h);
+        });
+        x1 = minX; x2 = maxX; topY = minY; bottomY = maxY;
+      }
+      const wM = (x2 - x1) / PX_PER_METER;
+      const hM = (bottomY - topY) / PX_PER_METER;
+      const fmt = v => (Math.round(v * 10) / 10).toFixed(1).replace('.', ',') + ' m';
+      const col = 'rgba(255,255,255,.45)';
+      const txt = 'rgba(255,255,255,.8)';
+      const yB = bottomY + 26;                 // Breiten-Massband direkt unter dem tatsaechlich untersten Punkt
+      const xH = x1 - 26;                      // Hoehen-Massband: exakt vom untersten bis obersten Punkt
+      // Nur aufblitzen, wenn sich die Masse tatsaechlich geaendert haben
+      const label = fmt(wM) + '|' + fmt(hM);
+      const changed = flashAllowed && prevScaleLabel !== null && prevScaleLabel !== label;
+      prevScaleLabel = label;
+      const flashCls = changed ? ' lk-scale-flash' : '';
+      scaleSvg = `<g class="lk-scale${flashCls}" fill="none" stroke="${col}" stroke-width="1">
+          <line x1="${x1}" y1="${yB}" x2="${x2}" y2="${yB}"/>
+          <line x1="${x1}" y1="${yB - 4}" x2="${x1}" y2="${yB + 4}"/>
+          <line x1="${x2}" y1="${yB - 4}" x2="${x2}" y2="${yB + 4}"/>
+          <line x1="${xH}" y1="${topY}" x2="${xH}" y2="${bottomY}"/>
+          <line x1="${xH - 4}" y1="${topY}" x2="${xH + 4}" y2="${topY}"/>
+          <line x1="${xH - 4}" y1="${bottomY}" x2="${xH + 4}" y2="${bottomY}"/>
+          <text x="${(x1 + x2) / 2}" y="${yB + 19}" text-anchor="middle" font-size="14" fill="${txt}" stroke="none" font-weight="600" font-family="Segoe UI, Arial, sans-serif">${fmt(wM)} breit</text>
+          <text x="${xH - 9}" y="${(topY + bottomY) / 2}" text-anchor="middle" font-size="14" fill="${txt}" stroke="none" font-weight="600" font-family="Segoe UI, Arial, sans-serif" transform="rotate(-90 ${xH - 9} ${(topY + bottomY) / 2})">${fmt(hM)} hoch</text>
+        </g>`;
+    })();
+
+    // Ausblenden-Overlay für alles, was im letzten Render noch da war und jetzt entweder weggefallen
+    // oder verschoben ist — MUSS vor dem Registry-Wechsel gebaut werden, da es prevRegistry vs.
+    // currentRegistry vergleicht.
+    const fadeOutSvg = buildFadeOutMarkup();
+    const phase1Svg = phase1Parts.join('');
+    prevRegistry = currentRegistry;
+
+    // Boden: sanfte Fläche mit Verlauf (wirkt wie eine echte Standfläche statt nur einer Linie),
+    // plus dezenter, heller Rand genau auf der Fußlinie für den "Kante Boden/Bühne"-Eindruck
+    const floorGradId = 'floorGrad';
+    const defsAndFloor = `<defs>
+        <linearGradient id="${floorGradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="rgba(255,255,255,.09)"/>
+          <stop offset="15%" stop-color="rgba(255,255,255,.03)"/>
+          <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+        </linearGradient>
+        <filter id="lkBrighten" x="-30%" y="-30%" width="160%" height="160%">
+          <feColorMatrix type="matrix" values="1.35 0 0 0 0.15  0 1.35 0 0 0.15  0 0 1.35 0 0.15  0 0 0 1 0"/>
+        </filter>
+        <filter id="lkBrightenStrong" x="-30%" y="-30%" width="160%" height="160%">
+          <feColorMatrix type="matrix" values="2.2 0 0 0 0.4  0 2.2 0 0 0.4  0 0 2.2 0 0.4  0 0 0 1 0"/>
+        </filter>
+      </defs>
+      <rect x="0" y="${FLOOR_Y}" width="${STAGE_W}" height="${STAGE_H - FLOOR_Y}" fill="url(#${floorGradId})"/>
+      <line x1="15" y1="${FLOOR_Y}" x2="${STAGE_W - 15}" y2="${FLOOR_Y}" stroke="rgba(255,255,255,.16)" stroke-width="1"/>`;
+    const viewBoxValue = (b >= 7) ? '8 -45 655 455' : '76 83 548 312';   // unten/links Platz fuer das Massband
+    const gridSvg = buildCoordGridSvg(viewBoxValue);
+    const finalSvg = defsAndFloor + svg + scaleSvg + gridSvg; // Phase 2: OHNE die Fade-Out-Elemente (sonst startet deren
+    // Animation beim zweiten innerHTML-Setzen neu → sichtbares kurzes Wieder-Aufblitzen vor dem Verschwinden)
+    svg = defsAndFloor + fadeOutSvg + svg;
+
+    // Zweistufige Anzeige, damit beim Umbau nichts "in der Luft hängt": Phase 1 zeigt sofort nur das
+    // Ausblenden + alles Unveränderte (nichts Neues/Verschobenes taucht schon auf). Erst nachdem das
+    // Ausblenden abgeschlossen ist (Phase 2, nach kurzer Verzögerung), erscheint der komplette,
+    // finale Stand inkl. Aufleuchten der wirklich neuen Teile — synchron, alles auf einmal.
+    if(stagePhaseTimer) clearTimeout(stagePhaseTimer);
+    if(fadeOutSvg){
+      stageSvgEl.innerHTML = defsAndFloor + fadeOutSvg + phase1Svg + scaleSvg + gridSvg;
+      stageSvgEl.setAttribute('viewBox', viewBoxValue);
+      stagePhaseTimer = setTimeout(() => {
+        stageSvgEl.innerHTML = finalSvg;
+        stageSvgEl.setAttribute('viewBox', viewBoxValue);
+      }, 270);
+    } else {
+      stageSvgEl.innerHTML = finalSvg;
+      stageSvgEl.setAttribute('viewBox', viewBoxValue);
+    }
+
+
+    // DJ-Booking-Label unter der Bühne (statt im SVG, damit Text sauber bleibt)
+    document.getElementById('djLabel').textContent = dj > 0 ? `${dj} Std. DJ-Booking` : '';
+
+    // ---- Lose Geräte ohne festen Platz (mehr Strobes/Parstrahler als aktuell Plätze vorhanden) ----
+    // Die manuell in die Ambientebeleuchtung verschobenen Parstrahler werden hier wieder dazugezählt
+    // (sie waren fuer die Traversen-Zuteilung bewusst ausgeklammert, siehe oben).
+    remainingA += state.aAmbientManual;
+    const prevExtra = prevExtraCounts || { extraStrobes: 0, extraA: 0, extraD: 0 };
+    let extraHtml = '';
+    if(remainingStrobes > 0){
+      extraHtml += `<span class="stage-mini-label">${remainingStrobes}x Strobe (noch ohne Pfosten)</span>`;
+      extraHtml += `<div class="extra-list-row">${tileStack(photos.strobe, 'Strobe', SIZE.strobe, remainingStrobes, 6, 0, remainingStrobes - prevExtra.extraStrobes)}</div>`;
+    }
+    if(remainingA > 0){
+      extraHtml += `<span class="stage-mini-label">${remainingA}x Parstrahler (z.B. Ambientebeleuchtung)</span>`;
+      const parNormalSize = { w: 26, h: Math.round(26 / RATIO.strahlerAngled) };
+      extraHtml += `<div class="extra-list-row">${tileStack(photos.strahlerAngled, 'Parstrahler', parNormalSize, remainingA, 999, 0, remainingA - prevExtra.extraA)}</div>`;
+    }
+    if(remainingD > 0){
+      extraHtml += `<span class="stage-mini-label">${remainingD}x Moving Wall Washer (noch ohne Platz)</span>`;
+      extraHtml += `<div class="extra-list-row">${tileStack(photos.wallwasher, 'Moving Wall Washer', SIZE.wallwasher, remainingD, 6, 0, remainingD - prevExtra.extraD)}</div>`;
+    }
+    extraListEl.innerHTML = extraHtml;
+
+    prevExtraCounts = { extraStrobes: remainingStrobes, extraA: remainingA, extraD: remainingD };
+  }
+
+  renderCategories();
+  renderStage();
+  renderSummary();
+
+  // ============================================================================
+  // Vorschaubox wandert beim Scrollen mit — ohne position:sticky/fixed.
+  // Grund: Die IONOS-Seite nutzt einen Smooth-Scroll-Wrapper mit CSS-transform.
+  // Ein Vorfahre mit transform macht "fixed" wirkungslos (wird zu absolute), und
+  // "sticky" klebt nur innerhalb des nächsten overflow-Containers. transform:
+  // translateY() ist von beidem unabhängig — die Position wird pro Frame neu
+  // gemessen, also funktioniert es unabhängig davon, welches Element scrollt.
+  // ============================================================================
+  // ============================================================================
+  // Responsive Größenstufen: misst die TATSÄCHLICH gerenderte Breite des Widgets
+  // selbst (nicht die Fensterbreite) und setzt entsprechend eine Klasse.
+  // Grund: Fenster-basierte @media-Regeln greifen bei in IONOS eingebetteten Widgets
+  // oft nicht zuverlässig, da die Seite das Widget in einem eigenen Container mit
+  // fester oder abweichender Breite rendert. ResizeObserver reagiert stattdessen
+  // direkt auf die reale Breite, egal wie/wo das Widget eingebettet ist.
+  // ============================================================================
+  // ============================================================================
+  // Doppeltipp-Zoom unterbinden (iOS Safari beachtet touch-action hier nicht zuverlaessig).
+  // Es wird nur der ZWEITE schnelle Einzel-Tipp abgefangen; Pinch-Zoom mit zwei Fingern bleibt
+  // vollstaendig erhalten, da Mehrfinger-Beruehrungen ignoriert werden.
+  // ============================================================================
+  // ============================================================================
+  // Selbstkorrektur der horizontalen Lage: Manche Baukasten-Vorlagen geben dem HTML-Modul einen
+  // Container, der breiter als der sichtbare Bereich ist oder seitlich versetzt sitzt — dann steht
+  // das Widget nicht mittig. Hier wird die tatsaechliche Lage gemessen und der Versatz ausgeglichen.
+  // ============================================================================
+  (function preventDoubleTapZoom(){
+    var el = document.querySelector('.lk-widget');
+    if(!el) return;
+    var lastTouch = 0;
+    el.addEventListener('touchend', function(e){
+      if(e.touches && e.touches.length > 1) return;      // Mehrfinger -> nicht eingreifen
+      if(e.changedTouches && e.changedTouches.length > 1) return;
+      var now = Date.now();
+      if(now - lastTouch <= 320){
+        e.preventDefault();   // verhindert nur das Zoomen, der Klick selbst wird weiter ausgeloest
+      }
+      lastTouch = now;
+    }, { passive: false });
+    // Safari-eigene Doppeltipp-Geste zusaetzlich abfangen
+    el.addEventListener('gesturestart', function(e){ /* Pinch erlauben */ }, { passive: true });
+    el.addEventListener('dblclick', function(e){ e.preventDefault(); }, { passive: false });
+  })();
+
+  (function responsiveSizing(){
+    var el = document.querySelector('.lk-widget');
+    if(!el) return;
+    function applyTier(){
+      var w = el.getBoundingClientRect().width;
+      var next = w <= 600 ? 'lk-size-sm' : (w <= 1500 ? 'lk-size-md' : 'lk-size-lg');
+      if(el.dataset.sizeTier === next) return;
+      el.dataset.sizeTier = next;
+      el.classList.remove('lk-size-lg', 'lk-size-md', 'lk-size-sm');
+      el.classList.add(next);
+    }
+    applyTier();
+    if(window.ResizeObserver){
+      new ResizeObserver(applyTier).observe(el);
+    } else {
+      window.addEventListener('resize', applyTier);
+    }
+  })();
+
+  (function stickyPreview(){
+    var box  = document.getElementById('stageBox');
+    var cats = document.getElementById('categories');
+    if(!box || !cats || !window.requestAnimationFrame) return;
+
+    var GAP = 12;              // Abstand zur Oberkante
+    var applied = null, y = 0, scroller = null, host = null;
+    var jsMode = false;        // JS-Rueckfall erst aktivieren, wenn natives sticky nachweislich versagt
+
+    // Falls das Widget in einem iframe steckt: Position im Eltern-Viewport messen
+    try { if (window.self !== window.top && window.frameElement) host = window.frameElement; }
+    catch(e){ host = null; }   // fremde Domain -> nicht lesbar, ignorieren
+
+    function findScroller(){
+      var p = box.parentElement;
+      while(p && p !== document.body && p !== document.documentElement){
+        var st = getComputedStyle(p);
+        if(/(auto|scroll|overlay)/.test(st.overflowY + ' ' + st.overflow) &&
+           p.scrollHeight > p.clientHeight + 4) return p;
+        p = p.parentElement;
+      }
+      return null;
+    }
+
+    // Prueft, ob natives position:sticky wirklich greift. Kriterium: Die Box darf nie deutlich ueber
+    // die vorgesehene Oberkante hinauslaufen, solange die Geraeteliste darunter noch sichtbar ist.
+    // Tut sie das doch, ist sticky durch die Seitenstruktur ausgehebelt -> JS-Rueckfall aktivieren.
+    function stickyWorks(){
+      var r = box.getBoundingClientRect();
+      var catBottom = cats.getBoundingClientRect().bottom;
+      if(catBottom < r.height + GAP) return true;   // Liste zu Ende: Box darf mit hochlaufen
+      return r.top > -4;                            // sonst muesste sticky sie oben halten
+    }
+
+    function enableJsMode(){
+      if(jsMode) return;
+      jsMode = true;
+      box.classList.add('lk-js-follow');
+      scroller = findScroller();
+      window.addEventListener('resize', function(){ scroller = findScroller(); });
+      requestAnimationFrame(tick);
+    }
+
+    // Waehrend natives sticky laeuft: nur beobachten (kein transform, keine Layout-Aenderung pro Frame,
+    // dadurch bleibt die Schrift beim Scrollen gestochen scharf).
+    function watch(){
+      if(jsMode) return;
+      if(!stickyWorks()){ enableJsMode(); return; }
+      var r = box.getBoundingClientRect();
+      box.classList.toggle('is-stuck', r.top <= GAP + 1);
+      requestAnimationFrame(watch);
+    }
+
+    function tick(){
+      var r = box.getBoundingClientRect();
+      var h = r.height;
+      var offset = 0, top = 0;
+      var bottom = window.innerHeight || document.documentElement.clientHeight;
+
+      if(host){                                   // Widget steckt im iframe
+        try {
+          offset = host.getBoundingClientRect().top;
+          bottom = window.parent.innerHeight || bottom;
+        } catch(e){ offset = 0; }
+      } else if(scroller){                        // eigener Scroll-Container
+        var sr = scroller.getBoundingClientRect();
+        top    = Math.max(0, sr.top);
+        bottom = Math.min(bottom, sr.bottom);
+      }
+
+      var next = 0;
+      if(h + GAP * 2 < (bottom - top)){           // nur wenn genug Platz ist
+        var naturalTop = r.top + offset - y;      // Position ohne unsere Verschiebung
+        var catBottom  = cats.getBoundingClientRect().bottom + offset;
+        var maxY = Math.max(0, catBottom - (naturalTop + h));  // nicht über die Liste hinaus
+        next = Math.min(Math.max(top + GAP - naturalTop, 0), maxY);
+      }
+
+      if(applied === null || Math.abs(next - applied) > 0.5){
+        applied = next; y = next;
+        // Immer translate3d (nie auf einen leeren String zurücksetzen) und auf ganze Pixel runden:
+        // Das hält die Box durchgehend auf ihrer eigenen GPU-Ebene. Ein Wechsel zwischen "kein transform"
+        // und "transform gesetzt" lässt den Browser die Ebene bei jedem Wechsel neu aufbauen — bei
+        // schnellem Scrollen (viele Wechsel pro Sekunde) entsteht dadurch genau das doppelte/verwaschene
+        // Schriftbild. Subpixel-Werte (Nachkommastellen) verursachen zusätzlich Kantenflimmern beim Text.
+        box.style.transform = 'translate3d(0,' + Math.round(next) + 'px,0)';
+        box.classList.toggle('is-stuck', next > 0.5);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // Startet im nativen sticky-Modus; JS uebernimmt nur, falls sticky nicht greift.
+    requestAnimationFrame(watch);
+  })();
+</script>

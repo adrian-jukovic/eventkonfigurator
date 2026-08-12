@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eventkonfigurator – Live-Vorschau</title>
+  <style>
+    html, body { margin: 0; background: #0c1424; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    fetch('eventkonfigurator.html?_=' + Date.now())
+      .then(r => r.text())
+      .then(html => {
+        const container = document.getElementById('app');
+        container.innerHTML = html;
+        container.querySelectorAll('script').forEach(old => {
+          const s = document.createElement('script');
+          if (old.src) s.src = old.src; else s.textContent = old.textContent;
+          old.replaceWith(s);
+        });
+      });
+  </script>
+</body>
+</html>
