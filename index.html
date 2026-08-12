@@ -1,27 +1,571 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Eventkonfigurator – Live-Vorschau</title>
-  <style>
-    html, body { margin: 0; background: #0c1424; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jukert Party &amp; Eventservice — DJ, Licht &amp; Sound für Hochzeiten und Events</title>
+<meta name="description" content="Jukert Party & Eventservice GbR aus Limburg/Hessen: DJ, Licht- und Tontechnik für Hochzeiten, Firmenfeiern und private Feiern.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --night:#0a1428;
+    --night-2:#0f1d3a;
+    --night-3:#132449;
+    --blue:#2f6fed;
+    --blue-soft:#7fa8ff;
+    --orange:#ff8a3d;
+    --orange-deep:#f2622e;
+    --ink:#0c1424;
+    --paper:#f7f5f0;
+    --paper-2:#efece4;
+    --white-ish:#eef1f8;
+    --muted:#a9b4cc;
+    --radius:14px;
+    --maxw:1180px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{
+    font-family:'Bebas Neue',system-ui,sans-serif;
+    letter-spacing:.02em;
+    line-height:.95;
+    font-weight:400;
+  }
+  .eyebrow{
+    font-family:'Inter Tight',sans-serif;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.16em;
+    font-size:.72rem;
+    color:var(--orange);
+  }
+  a{color:inherit;}
+  img{max-width:100%;display:block;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;}
+  :focus-visible{outline:3px solid var(--orange);outline-offset:3px;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important; transition:none !important;}
+  }
+
+  /* ---------- NAV ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(10,20,40,.82);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  .navbar{
+    max-width:var(--maxw);margin:0 auto;padding:16px 28px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .brand{
+    display:flex;align-items:baseline;gap:10px;
+    color:var(--white-ish);text-decoration:none;
+  }
+  .brand .mark{
+    font-family:'Bebas Neue',sans-serif;font-size:1.5rem;color:var(--orange);
+    letter-spacing:.03em;
+  }
+  .brand .word{font-family:'Bebas Neue',sans-serif;font-size:1.35rem;letter-spacing:.04em;}
+  nav ul{list-style:none;display:flex;gap:28px;margin:0;padding:0;}
+  nav a{
+    color:var(--muted);text-decoration:none;font-size:.92rem;font-weight:600;
+    position:relative;padding-bottom:4px;
+  }
+  nav a:hover{color:var(--white-ish);}
+  nav a::after{
+    content:'';position:absolute;left:0;right:0;bottom:0;height:2px;
+    background:var(--orange);transform:scaleX(0);transform-origin:left;
+    transition:transform .25s ease;
+  }
+  nav a:hover::after{transform:scaleX(1);}
+  .nav-cta{
+    background:var(--orange);color:var(--night);padding:9px 18px;border-radius:999px;
+    font-weight:700;font-size:.85rem;text-decoration:none;white-space:nowrap;
+  }
+  .nav-toggle{display:none;}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative;overflow:hidden;
+    background:radial-gradient(1200px 600px at 20% -10%, var(--night-3), var(--night) 55%);
+    color:var(--white-ish);
+    padding:96px 0 84px;
+  }
+  .spotlight{
+    position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(420px 420px at var(--sx,30%) 20%, rgba(255,138,61,.22), transparent 60%),
+      radial-gradient(360px 360px at 75% 65%, rgba(47,111,237,.28), transparent 60%);
+    animation:sweep 14s ease-in-out infinite;
+  }
+  @keyframes sweep{
+    0%,100%{--sx:15%;}
+    50%{--sx:70%;}
+  }
+  .hero-grid{
+    position:relative;z-index:1;
+    display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:center;
+  }
+  .hero h1{
+    font-size:clamp(2.8rem,6vw,4.6rem);
+    margin:14px 0 20px;
+  }
+  .hero h1 .accent{color:var(--orange);}
+  .hero p.lead{
+    font-size:1.12rem;color:var(--muted);max-width:46ch;margin:0 0 30px;
+  }
+  .hero-actions{display:flex;gap:14px;flex-wrap:wrap;}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:14px 26px;border-radius:999px;font-weight:700;font-size:.95rem;
+    text-decoration:none;border:1px solid transparent;
+  }
+  .btn-primary{background:var(--orange);color:var(--night);}
+  .btn-primary:hover{background:var(--orange-deep);}
+  .btn-ghost{border-color:rgba(255,255,255,.28);color:var(--white-ish);}
+  .btn-ghost:hover{border-color:var(--orange);color:var(--orange);}
+
+  .hero-panel{
+    background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:20px;padding:26px;
+  }
+  .hero-panel .stat{padding:14px 4px;border-bottom:1px solid rgba(255,255,255,.1);}
+  .hero-panel .stat:last-child{border-bottom:none;}
+  .hero-panel .stat b{
+    display:block;font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--orange);
+  }
+  .hero-panel .stat span{color:var(--muted);font-size:.88rem;}
+
+  /* equalizer divider */
+  .eq{
+    display:flex;align-items:flex-end;gap:4px;height:34px;
+    max-width:var(--maxw);margin:0 auto;padding:0 28px;
+  }
+  .eq i{
+    display:block;width:4px;border-radius:2px;
+    background:linear-gradient(180deg,var(--orange),var(--blue));
+    animation:bump 1.6s ease-in-out infinite;
+  }
+  @keyframes bump{
+    0%,100%{transform:scaleY(.3);}
+    50%{transform:scaleY(1);}
+  }
+  .eq-wrap{background:var(--night);padding:18px 0;}
+
+  /* ---------- SECTION SHELLS ---------- */
+  section{padding:88px 0;}
+  .section-head{max-width:640px;margin-bottom:52px;}
+  .section-head h2{font-size:clamp(2.2rem,4vw,3rem);margin:10px 0 14px;}
+  .section-head p{color:#5b6270;font-size:1.05rem;line-height:1.6;}
+  .dark .section-head p{color:var(--muted);}
+  .dark{background:var(--night);color:var(--white-ish);}
+
+  /* ---------- LEISTUNGEN ---------- */
+  .services{display:grid;grid-template-columns:1fr 1fr;gap:26px;}
+  .svc-card{
+    background:#fff;border:1px solid #e7e3d9;border-radius:var(--radius);
+    padding:34px;position:relative;overflow:hidden;
+  }
+  .svc-card .icon{
+    width:52px;height:52px;border-radius:14px;margin-bottom:20px;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--night);
+  }
+  .svc-card h3{font-size:1.9rem;margin:0 0 10px;color:var(--night);}
+  .svc-card p{color:#575d6b;line-height:1.65;margin:0 0 18px;}
+  .svc-card ul{margin:0;padding-left:0;list-style:none;}
+  .svc-card li{
+    display:flex;gap:10px;padding:7px 0;font-size:.94rem;color:#3a3f4b;
+    border-top:1px dashed #e2ded2;
+  }
+  .svc-card li:first-child{border-top:none;}
+  .svc-card li::before{content:'—';color:var(--orange);font-weight:700;}
+
+  .icon svg{width:26px;height:26px;}
+
+  .process{
+    margin-top:64px;display:grid;grid-template-columns:repeat(3,1fr);gap:26px;
+  }
+  .process .step{padding:0 6px;}
+  .process .num{
+    font-family:'Bebas Neue',sans-serif;font-size:3rem;color:var(--blue);
+    display:block;line-height:1;margin-bottom:8px;
+  }
+  .process h4{margin:0 0 8px;font-size:1.15rem;}
+  .process p{margin:0;color:#5b6270;font-size:.94rem;line-height:1.55;}
+
+  /* ---------- PAKETE ---------- */
+  .pakete-head{max-width:640px;margin:70px 0 36px;}
+  .pakete-head h2{font-size:clamp(1.9rem,3.4vw,2.5rem);margin:10px 0 12px;}
+  .pakete-head p{color:#5b6270;font-size:1.02rem;line-height:1.6;}
+  .pakete{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;}
+  .paket-card{
+    background:#fff;border:1px solid #e7e3d9;border-radius:var(--radius);
+    padding:30px 26px;display:flex;flex-direction:column;
+  }
+  .paket-img{
+    margin:-30px -26px 22px;height:170px;overflow:hidden;
+    border-radius:var(--radius) var(--radius) 0 0;
+    background:var(--paper-2);
+    display:grid;grid-template-columns:1.3fr 1fr;gap:2px;
+  }
+  .paket-img img{width:100%;height:100%;object-fit:cover;}
+  .paket-card.featured{
+    background:var(--night);border-color:var(--night);color:var(--white-ish);
+    transform:translateY(-8px);
+    box-shadow:0 24px 40px -20px rgba(10,20,40,.45);
+  }
+  .paket-tag{
+    align-self:flex-start;
+    font-family:'Inter Tight',sans-serif;font-weight:700;font-size:.72rem;
+    text-transform:uppercase;letter-spacing:.14em;
+    background:var(--paper-2);color:var(--night);
+    padding:5px 12px;border-radius:999px;margin-bottom:16px;
+  }
+  .paket-card.featured .paket-tag{background:var(--orange);color:var(--night);}
+  .paket-card h3{font-size:1.5rem;margin:0 0 10px;color:var(--night);}
+  .paket-card.featured h3{color:var(--white-ish);}
+  .paket-sub{color:#5b6270;font-size:.92rem;line-height:1.55;margin:0 0 20px;}
+  .paket-card.featured .paket-sub{color:var(--muted);}
+  .paket-card ul{list-style:none;margin:0 0 24px;padding:0;flex:1;}
+  .paket-card li{
+    padding:8px 0;font-size:.9rem;border-top:1px dashed #e2ded2;
+    display:flex;gap:8px;color:#3a3f4b;
+  }
+  .paket-card.featured li{border-top-color:rgba(255,255,255,.14);color:var(--white-ish);}
+  .paket-card li:first-child{border-top:none;}
+  .paket-card li::before{content:'✓';color:var(--orange);font-weight:700;}
+  .paket-link{
+    align-self:flex-start;font-weight:700;font-size:.92rem;text-decoration:none;
+    color:var(--blue);
+  }
+  .paket-card.featured .paket-link{color:var(--orange);}
+  .paket-note{margin-top:22px;color:#5b6270;font-size:.88rem;}
+
+  /* ---------- ÜBER UNS ---------- */
+  .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start;}
+  .about-copy p{color:var(--muted);line-height:1.75;font-size:1.02rem;margin:0 0 18px;}
+  .team{display:flex;flex-direction:column;gap:16px;}
+  .team .person{
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+    border-radius:var(--radius);padding:22px 24px;display:flex;gap:16px;align-items:center;
+  }
+  .team .avatar{
+    width:52px;height:52px;border-radius:50%;flex:none;
+    background:conic-gradient(from 220deg, var(--orange), var(--blue), var(--orange));
+  }
+  .team h4{margin:0 0 3px;font-family:'Inter Tight',sans-serif;font-size:1.05rem;}
+  .team span{color:var(--muted);font-size:.88rem;}
+  .values{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px;}
+  .values span{
+    border:1px solid rgba(255,255,255,.18);border-radius:999px;
+    padding:8px 16px;font-size:.85rem;color:var(--white-ish);
+  }
+
+  /* ---------- KONTAKT ---------- */
+  .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;}
+  .contact-cards{display:grid;gap:16px;}
+  .c-card{
+    background:#fff;border:1px solid #e7e3d9;border-radius:var(--radius);
+    padding:22px 24px;display:flex;gap:16px;align-items:flex-start;
+  }
+  .c-card .ic{
+    width:40px;height:40px;border-radius:10px;background:var(--night);flex:none;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .c-card h4{margin:0 0 4px;font-size:1rem;}
+  .c-card a, .c-card p{margin:0;color:#575d6b;font-size:.95rem;text-decoration:none;}
+  .c-card a{color:var(--blue);font-weight:600;}
+
+  .cta-box{
+    background:var(--night);color:var(--white-ish);border-radius:20px;
+    padding:36px 34px;position:relative;overflow:hidden;
+  }
+  .cta-box::after{
+    content:'';position:absolute;inset:0;
+    background:radial-gradient(300px 220px at 90% 0%, rgba(255,138,61,.25), transparent 70%);
+  }
+  .cta-box h3{position:relative;font-size:2rem;margin:8px 0 12px;}
+  .cta-box p{position:relative;color:var(--muted);margin:0 0 24px;line-height:1.6;}
+  .cta-box .btn{position:relative;}
+  .note{font-size:.82rem;color:var(--muted);margin-top:16px;position:relative;}
+
+  footer{
+    background:var(--night);color:var(--muted);border-top:1px solid rgba(255,255,255,.08);
+    padding:34px 0;font-size:.85rem;
+  }
+  .foot-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+  .foot-row a{color:var(--muted);text-decoration:none;margin-left:18px;}
+  .foot-row a:hover{color:var(--orange);}
+
+  @media (max-width:900px){
+    .hero-grid,.services,.about-grid,.contact-grid,.pakete{grid-template-columns:1fr;}
+    .process{grid-template-columns:1fr;}
+    .paket-card.featured{transform:none;}
+    nav ul{display:none;}
+  }
+</style>
 </head>
 <body>
-  <div id="app"></div>
-  <script>
-    fetch('eventkonfigurator.html?_=' + Date.now())
-      .then(r => r.text())
-      .then(html => {
-        const container = document.getElementById('app');
-        container.innerHTML = html;
-        container.querySelectorAll('script').forEach(old => {
-          const s = document.createElement('script');
-          if (old.src) s.src = old.src; else s.textContent = old.textContent;
-          old.replaceWith(s);
-        });
-      });
-  </script>
+
+<header>
+  <div class="navbar">
+    <a class="brand" href="#start">
+      <span class="mark">J</span><span class="word">JUKERT PARTY &amp; EVENTSERVICE</span>
+    </a>
+    <nav aria-label="Hauptnavigation">
+      <ul>
+        <li><a href="#start">Start</a></li>
+        <li><a href="#leistungen">Leistungen</a></li>
+        <li><a href="konfigurator.html">Eventkonfigurator</a></li>
+        <li><a href="#ueber-uns">Über uns</a></li>
+        <li><a href="#kontakt">Kontakt</a></li>
+      </ul>
+    </nav>
+    <a class="nav-cta" href="#kontakt">Anfragen</a>
+  </div>
+</header>
+
+<section class="hero" id="start">
+  <div class="spotlight" aria-hidden="true"></div>
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">DJ · Licht · Ton — Limburg &amp; Hessen</span>
+      <h1>Eure Feier.<br>Unser <span class="accent">Sound &amp; Licht.</span></h1>
+      <p class="lead">Jukert Party &amp; Eventservice bringt Musik, Licht und Technik für Hochzeiten, Firmenfeiern und private Feste zusammen — persönlich geplant, professionell umgesetzt.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#kontakt">Kostenlose Beratung anfragen</a>
+        <a class="btn btn-ghost" href="#leistungen">Leistungen ansehen</a>
+      </div>
+    </div>
+    <div class="hero-panel">
+      <div class="stat"><b>DJ, Licht &amp; Ton</b><span>aus einer Hand, ein Ansprechpartner</span></div>
+      <div class="stat"><b>Adrian &amp; Martin</b><span>planen, bauen auf und legen selbst auf</span></div>
+      <div class="stat"><b>Hessen</b><span>Hochzeiten &amp; Events im Raum Limburg und Umgebung</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="eq-wrap" aria-hidden="true">
+  <div class="eq">
+    <i style="animation-delay:.0s;height:10px"></i>
+    <i style="animation-delay:.1s;height:22px"></i>
+    <i style="animation-delay:.2s;height:14px"></i>
+    <i style="animation-delay:.3s;height:30px"></i>
+    <i style="animation-delay:.4s;height:18px"></i>
+    <i style="animation-delay:.5s;height:26px"></i>
+    <i style="animation-delay:.6s;height:12px"></i>
+    <i style="animation-delay:.7s;height:24px"></i>
+    <i style="animation-delay:.8s;height:16px"></i>
+    <i style="animation-delay:.9s;height:28px"></i>
+    <i style="animation-delay:1.0s;height:20px"></i>
+    <i style="animation-delay:1.1s;height:10px"></i>
+  </div>
+</div>
+
+<section id="leistungen">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Leistungen</span>
+      <h2>Zwei Gewerke, ein Team</h2>
+      <p>Musik und Licht werden bei uns gemeinsam geplant — dadurch passt am Abend alles zusammen, ohne Abstimmung zwischen mehreren Dienstleistern.</p>
+    </div>
+
+    <div class="services">
+      <div class="svc-card">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.4" fill="#ff8a3d" stroke="none"/><path d="M12 3v2M21 12h-2"/></svg>
+        </div>
+        <h3>DJ</h3>
+        <p>Musik, die zur Feier und zu den Gästen passt — von der ersten Tanzrunde bis zur letzten Stunde auf der Tanzfläche.</p>
+        <ul>
+          <li>Hochzeiten &amp; freie Trauungen</li>
+          <li>Geburtstage &amp; private Feiern</li>
+          <li>Firmenfeiern &amp; Sommerfeste</li>
+          <li>Musikwunsch-Abstimmung vorab</li>
+        </ul>
+      </div>
+
+      <div class="svc-card">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="1.8"><path d="M12 3v6M8 21l4-6 4 6M5 10l14-2M5 10l2 4M19 8l-2 4"/></svg>
+        </div>
+        <h3>Licht &amp; Ton</h3>
+        <p>Passende Beleuchtung und klarer Sound für Location und Anlass — dezent zum Essen, wirkungsvoll auf der Tanzfläche.</p>
+        <ul>
+          <li>Ambiente- &amp; Dekolicht für die Location</li>
+          <li>Bühnen- &amp; Showlicht</li>
+          <li>PA-Technik &amp; Beschallung</li>
+          <li>Aufbau, Betreuung &amp; Abbau vor Ort</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="process">
+      <div class="step">
+        <span class="num">01</span>
+        <h4>Beratung</h4>
+        <p>Kennenlernen, Wünsche und Location besprechen — unverbindlich und persönlich.</p>
+      </div>
+      <div class="step">
+        <span class="num">02</span>
+        <h4>Planung</h4>
+        <p>Musik, Licht und Ablauf werden gemeinsam mit euch festgelegt und abgestimmt.</p>
+      </div>
+      <div class="step">
+        <span class="num">03</span>
+        <h4>Durchführung</h4>
+        <p>Wir bauen auf, sind während der Feier vor Ort und kümmern uns um einen reibungslosen Abend.</p>
+      </div>
+    </div>
+
+    <div class="pakete-head">
+      <span class="eyebrow">Pakete</span>
+      <h2>DJ, Licht &amp; Sound — abgestuft nach Event­größe</h2>
+      <p>Ob kleine Feier oder große Halle: Unsere Pakete kombinieren DJ, Licht- und Soundtechnik in drei Ausstattungsstufen. Auch einzelne Bausteine wie „DJ only", „DJ &amp; Licht" oder „DJ &amp; Sound" sind buchbar — auf Wunsch stellen wir euch auch ein individuelles Paket zusammen.</p>
+    </div>
+
+    <div class="pakete">
+      <div class="paket-card">
+        <div class="paket-img">
+          <img src="https://static.wixstatic.com/media/3789c6_da0ed634dd3844aeace3d78cc21ecb58~mv2.png" alt="Licht- &amp; Sound-Paket Compact" loading="lazy">
+          <img src="https://static.wixstatic.com/media/3789c6_3931f29310524d02ae26c6976174f131~mv2.png" alt="DJ-Pult" loading="lazy">
+        </div>
+        <span class="paket-tag">Compact</span>
+        <h3>DJ &amp; Licht &amp; Sound<br>Compact</h3>
+        <p class="paket-sub">Kompakte Technik­lösung für kleinere Events und Locations mit begrenztem Platz.</p>
+        <ul>
+          <li>DJ-Service für den gesamten Abend</li>
+          <li>Licht-Paket Compact</li>
+          <li>Sound-Paket Compact</li>
+          <li>Nebelmaschine inklusive</li>
+        </ul>
+        <a class="paket-link" href="mailto:Jukert-Partyservice@outlook.de?subject=Anfrage%20Paket%20Compact">Anfragen →</a>
+      </div>
+
+      <div class="paket-card featured">
+        <div class="paket-img" style="grid-template-columns:1fr;">
+          <img src="https://static.wixstatic.com/media/3789c6_37fa35d4190041aab1a88e107ecec132~mv2.png" alt="Licht-Paket Plus" loading="lazy">
+        </div>
+        <span class="paket-tag">Plus</span>
+        <h3>DJ &amp; Licht &amp; Sound<br>Plus</h3>
+        <p class="paket-sub">Unsere beliebteste Kombination — für Hochzeiten und Feiern mit gehobenem Anspruch.</p>
+        <ul>
+          <li>DJ-Service für den gesamten Abend</li>
+          <li>Licht-Paket Plus mit erweiterter Show­technik</li>
+          <li>Sound-Paket Compact</li>
+          <li>Nebelmaschine inklusive</li>
+        </ul>
+        <a class="paket-link" href="mailto:Jukert-Partyservice@outlook.de?subject=Anfrage%20Paket%20Plus">Anfragen →</a>
+      </div>
+
+      <div class="paket-card">
+        <div class="paket-img">
+          <img src="https://static.wixstatic.com/media/3789c6_bf6a9fe38586445eaeb8eaf1e01627f8~mv2.png" alt="Premium Stage-Konstruktion" loading="lazy">
+          <img src="https://static.wixstatic.com/media/3789c6_3931f29310524d02ae26c6976174f131~mv2.png" alt="DJ-Pult" loading="lazy">
+        </div>
+        <span class="paket-tag">Premium</span>
+        <h3>DJ &amp; Licht &amp; Sound<br>Premium</h3>
+        <p class="paket-sub">Unser größtes Paket mit beeindruckender Stage-Konstruktion für maximale Wirkung.</p>
+        <ul>
+          <li>DJ-Service für den gesamten Abend</li>
+          <li>Licht-Paket Premium mit Bühnen-Aufbau</li>
+          <li>Sound-Paket Plus</li>
+          <li>Nebelmaschine inklusive</li>
+        </ul>
+        <a class="paket-link" href="mailto:Jukert-Partyservice@outlook.de?subject=Anfrage%20Paket%20Premium">Anfragen →</a>
+      </div>
+    </div>
+    <p class="paket-note">Preise richten sich nach Event­größe, Location und gewünschter Technik — auf Anfrage erstellen wir euch ein individuelles Angebot.</p>
+  </div>
+</section>
+
+<section class="dark" id="ueber-uns">
+  <div class="wrap about-grid">
+    <div class="about-copy">
+      <span class="eyebrow">Über uns</span>
+      <h2>Jukert Party &amp; Eventservice GbR</h2>
+      <p>Aus der Freude an Musik, Licht und guten Feiern ist Jukert Party &amp; Eventservice entstanden. Wir sind ein kleines, eingespieltes Team aus Hessen, das DJ-Sets und Veranstaltungstechnik selbst plant, aufbaut und am Abend betreut.</p>
+      <p>Ob Hochzeit im Zelt, Firmenfeier in der Halle oder Geburtstag im Garten — wir kümmern uns darum, dass Musik, Licht und Ton zusammenpassen und ihr euch auf eure Gäste konzentrieren könnt.</p>
+      <div class="values">
+        <span>Persönliche Beratung</span>
+        <span>Technik aus einer Hand</span>
+        <span>Vor Ort ansprechbar</span>
+      </div>
+    </div>
+    <div class="team">
+      <div class="person">
+        <div class="avatar" aria-hidden="true"></div>
+        <div>
+          <h4>Adrian</h4>
+          <span>DJ &amp; Licht-/Tontechnik</span>
+        </div>
+      </div>
+      <div class="person">
+        <div class="avatar" aria-hidden="true"></div>
+        <div>
+          <h4>Martin Ekkert</h4>
+          <span>DJ &amp; Licht-/Tontechnik</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="kontakt">
+  <div class="wrap contact-grid">
+    <div>
+      <div class="section-head" style="margin-bottom:28px;">
+        <span class="eyebrow">Kontakt</span>
+        <h2>Lasst uns eure Feier besprechen</h2>
+        <p>Schreibt uns kurz Datum, Ort und Anlass — wir melden uns für ein unverbindliches Beratungsgespräch.</p>
+      </div>
+      <div class="contact-cards">
+        <div class="c-card">
+          <div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="m4 6 8 7 8-7"/></svg></div>
+          <div><h4>E-Mail</h4><a href="mailto:Jukert-Partyservice@outlook.de">Jukert-Partyservice@outlook.de</a></div>
+        </div>
+        <div class="c-card">
+          <div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff8a3d" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1" fill="#ff8a3d" stroke="none"/></svg></div>
+          <div><h4>Instagram</h4><a href="https://www.instagram.com/jukert_partyeventservice/" target="_blank" rel="noopener">@jukert_partyeventservice</a></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cta-box">
+      <span class="eyebrow" style="position:relative">Direkt anfragen</span>
+      <h3>Termin &amp; Anlass<br>schon im Kopf?</h3>
+      <p>Schickt uns eine kurze Nachricht per Mail mit Datum, Location und Gästezahl — den Rest besprechen wir gemeinsam.</p>
+      <a class="btn btn-primary" href="mailto:Jukert-Partyservice@outlook.de?subject=Anfrage%20Jukert%20Party%20%26%20Eventservice">Jetzt Anfrage senden</a>
+      <p class="note">Antwort in der Regel innerhalb weniger Tage.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-row">
+    <span>© 2026 Jukert Party &amp; Eventservice GbR</span>
+    <div>
+      <a href="https://www.instagram.com/jukert_partyeventservice/" target="_blank" rel="noopener">Instagram</a>
+      <a href='/impressum'>Impressum</a>
+      <a href='/agb'>AGB</a>
+      <a href='/datenschutzerklaerung'>Datenschutz</a>
+      <a href='/barrierefreiheitserklaerung'>Barrierefreiheit</a>
+      <a href='/rueckerstattungsrichtlinien'>Rückerstattung</a>
+    </div>
+  </div>
+</footer>
+
 </body>
 </html>
