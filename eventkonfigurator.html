@@ -344,7 +344,7 @@
       <button type="button" class="stage-tool-btn stage-tool-btn--danger" id="resetAllBtn" onclick="resetAllSelections()">Alles zurücksetzen</button>
     </div>
     <div class="slot-edit-panel" id="slotEditPanel" style="display:none">
-      <p class="slot-edit-hint">Licht antippen und ziehen — die Gegenseite bewegt sich automatisch spiegelbildlich mit. Seitlich stufenlos, nach oben/unten im 5er-Raster. Grob hinschieben genügt: „Abstände angleichen“ setzt danach exakt gleiche Abstände.</p>
+      <p class="slot-edit-hint">Licht antippen und ziehen — die Gegenseite bewegt sich automatisch spiegelbildlich mit. Grob hinschieben genügt: „Abstände angleichen“ setzt danach exakt gleiche Abstände.</p>
       <pre class="slot-edit-out" id="slotEditOut"></pre>
       <div class="stage-tools">
         <button type="button" class="stage-tool-btn" onclick="equalizeSlotSpacing()">Abstände angleichen</button>
@@ -1375,8 +1375,6 @@
   // ============================================================================
   let slotEditorOn = false;
   let slotEditorDragging = false;
-  const SNAP_Y = 5;   // Rasterweite beim Ziehen nach oben/unten (links/rechts bleibt stufenlos)
-
   // Gruppen von Plaetzen, die untereinander gleichmaessig verteilt sein sollen. "Abstaende angleichen"
   // arbeitet immer auf einer solchen Gruppe: oberster und unterster Platz bleiben, wo sie sind, alle
   // dazwischen werden auf exakt gleiche Abstaende gesetzt.
@@ -1499,10 +1497,10 @@
     evt.preventDefault();
     // dxIn zaehlt Richtung Buehnenmitte — auf der rechten Seite ist das die andere Bildrichtung.
     const towardCenter = dragState.meta.side === 'left' ? 1 : -1;
-    // Links/rechts stufenlos, hoch/runter rastet im 5er-Raster ein: so lassen sich gleiche
-    // Hoehenabstaende schon per Finger treffen, ohne die seitliche Feinjustierung einzuschraenken.
+    // Bewusst KEIN Raster: grob per Finger hinschieben reicht, die exakten Abstaende stellt
+    // anschliessend "Abstaende angleichen" her.
     const dxIn = Math.round(dragState.baseDxIn + (p.x - dragState.startX) * towardCenter);
-    const dy = Math.round((dragState.baseDy + (p.y - dragState.startY)) / SNAP_Y) * SNAP_Y;
+    const dy = Math.round(dragState.baseDy + (p.y - dragState.startY));
     SLOT_OVERRIDES[dragState.key] = { dxIn, dy };
     if(dragFrame) return;                       // hoechstens ein Neuzeichnen pro Bildschirm-Frame
     dragFrame = requestAnimationFrame(() => {
