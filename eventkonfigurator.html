@@ -842,10 +842,19 @@
 
   // Vom Positions-Editor gesetzte Feinkorrekturen: { "1|par1m:3": { dxIn: 4, dy: -2 }, ... }
   // Leer = es gilt genau das, was oben im Katalog steht.
+  // Wird die Katalog-Fassung erhoeht (weil Korrekturen fest uebernommen wurden), verwirft der Browser
+  // seine gespeicherten Korrekturen automatisch — sonst wuerden sie doppelt wirken.
+  const SLOT_CATALOG_VERSION = 2;
   let SLOT_OVERRIDES = {};
   try {
-    const saved = window.localStorage && localStorage.getItem('lkSlotOverrides');
-    if(saved) SLOT_OVERRIDES = JSON.parse(saved) || {};
+    const savedVersion = Number(localStorage.getItem('lkSlotCatalogVersion') || 0);
+    if(savedVersion === SLOT_CATALOG_VERSION){
+      const saved = localStorage.getItem('lkSlotOverrides');
+      if(saved) SLOT_OVERRIDES = JSON.parse(saved) || {};
+    } else {
+      localStorage.removeItem('lkSlotOverrides');
+      localStorage.setItem('lkSlotCatalogVersion', String(SLOT_CATALOG_VERSION));
+    }
   } catch(e){ SLOT_OVERRIDES = {}; }
 
   // Zuordnung "gezeichnetes Geraet" -> "Katalog-Platz", wird bei jedem Render neu aufgebaut.
@@ -861,6 +870,24 @@
     for(let i = 0; i < list.length; i++) if(list[i].id === id) return list[i];
     return null;
   }
+
+  // ---- Fest uebernommene Feinjustierung aus dem Positions-Editor ----
+  // Diese Werte wurden im Editor per Finger eingestellt und hier dauerhaft eingetragen. Weil sie am
+  // Katalog-Platz haengen (und der relativ zur Traverse definiert ist), gelten sie automatisch in
+  // JEDER Kombination — auch wenn sich die Tuerme durch andere Geraetezahlen umbauen.
+  function tuneSlot(len, id, dxIn, dy){
+    const sl = findSlot(len, id);
+    if(!sl) return;
+    sl.dxIn = (sl.dxIn || 0) + dxIn;
+    sl.dy = (sl.dy || 0) + dy;
+  }
+  tuneSlot(0.5, 'foot',          -12, -10);
+  tuneSlot(0.5, 'parOpp',          0,   1);
+  tuneSlot(1.5, 'strobe:middle',   0,  -1);
+  tuneSlot(1.0, 'par1m:1',        33,   0);
+  tuneSlot(1.0, 'par1m:2',       -13,  33);
+  tuneSlot(1.0, 'par1m:3',         6,   4);
+  tuneSlot(1.0, 'par1m:4',        12,  -4);
 
   // Rechnet einen Katalog-Platz in die linke obere Ecke des Geraets um.
   // ctx enthaelt die konkrete Traversen-Geometrie dieses Turms, dev die Groesse des Geraets.
