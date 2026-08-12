@@ -1559,6 +1559,10 @@
     const panel = document.getElementById('slotEditPanel');
     if(panel) panel.style.display = slotEditorOn ? 'block' : 'none';
     stageSvgEl.classList.toggle('lk-slot-edit', slotEditorOn);
+    if(!slotEditorOn) addSlotMode = false;
+    // Neu zeichnen, damit die Markierungen der freien Montagepunkte sofort erscheinen bzw. verschwinden
+    prevRegistry = {}; flashAllowed = false;
+    renderStage();
     updateSlotEditPanel();
   }
 
