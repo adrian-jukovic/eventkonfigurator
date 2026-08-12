@@ -353,7 +353,18 @@
     <div class="stage-tools">
       <button type="button" class="stage-tool-btn" id="gridToggleBtn" onclick="toggleCoordGrid()">Koordinaten anzeigen</button>
       <button type="button" class="stage-tool-btn" id="slotEditBtn" onclick="toggleSlotEditor()">Positionen bearbeiten</button>
+      <button type="button" class="stage-tool-btn" id="planModeBtn" onclick="togglePlanMode()">Montage-Plan</button>
       <button type="button" class="stage-tool-btn stage-tool-btn--danger" id="resetAllBtn" onclick="resetAllSelections()">Alles zurücksetzen</button>
+    </div>
+    <div class="slot-edit-panel" id="planPanel" style="display:none">
+      <p class="slot-edit-hint">Hier wird einmalig festgelegt, wo welches Gerät überhaupt hängen kann. Gerät auswählen, dann auf eine Traverse tippen — es erscheint in echter Größe, so siehst Du direkt, ob es dort passt. Setz ruhig <b>alle</b> möglichen Stellen, nicht nur die, die Du üblich baust. Gesetztes lässt sich verschieben; „Löschen“ an, dann antippen zum Entfernen. Die Bühnenmitte liegt rechts — die linke Seite ergibt sich automatisch spiegelbildlich.</p>
+      <div class="stage-tools" id="planDeviceBtns"></div>
+      <pre class="slot-edit-out" id="planOut"></pre>
+      <div class="stage-tools">
+        <button type="button" class="stage-tool-btn" id="planDeleteBtn" onclick="togglePlanDelete()">Löschen</button>
+        <button type="button" class="stage-tool-btn" onclick="copyPlan()">Zum Kopieren</button>
+        <button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="clearPlanDevice()">Dieses Gerät leeren</button>
+      </div>
     </div>
     <div class="slot-edit-panel" id="slotEditPanel" style="display:none">
       <p class="slot-edit-hint">Licht antippen und ziehen — die Gegenseite bewegt sich automatisch spiegelbildlich mit. <b>Höhen angleichen</b> macht nur die Abstände nach oben gleich und lässt die seitliche Lage in Ruhe (für Treppen-Anordnungen). <b>Seitlich ausrichten</b> stellt Lichter derselben Seite in eine Flucht.</p>
@@ -1587,6 +1598,168 @@
     return pt.matrixTransform(ctm.inverse());
   }
 
+  // ============================================================================
+  // MONTAGE-PLAN
+  // Eigene Ansicht: die drei Traversentypen leer nebeneinander. Hier wird EINMAL festgelegt, wo
+  // welches Geraet ueberhaupt haengen kann — mit dem echten Bild in echter Groesse, damit sich
+  // beurteilen laesst, ob es dort wirklich passt.
+  // Gespeichert wird jede Position relativ zur Traverse:
+  //   yPct = Hoehe in % der Traversenhoehe (Mitte des Geraets)
+  //   xRel = Abstand von der Traversen-Mittelachse in px, positiv = Richtung Buehnenmitte
+  // Dadurch gilt eine einmal gesetzte Position automatisch auf beiden Seiten (spiegelbildlich)
+  // und bei jeder Traversen-Anordnung.
+  // ============================================================================
+  let planMode = false;
+  let planDevice = 'strahlerFront';     // welches Geraet gerade gesetzt wird
+  let planDeleteMode = false;
+  let MOUNT_PLAN = {};                  // { "1": { strahlerFront: [{xRel,yPct}], ... } }
+  try {
+    const savedP = localStorage.getItem('lkMountPlan');
+    if(savedP) MOUNT_PLAN = JSON.parse(savedP) || {};
+  } catch(e){ MOUNT_PLAN = {}; }
+  function saveMountPlan(){
+    try { localStorage.setItem('lkMountPlan', JSON.stringify(MOUNT_PLAN)); } catch(e){}
+  }
+
+  // Die vier setzbaren Geraete (Strahler in zwei Ansichten, wie von Adrian gewuenscht)
+  const PLAN_DEVICES = {
+    strahlerFront:  { label: 'Strahler frontal', img: () => photos.strahlerFront,  size: () => SIZE.lichtAFront },
+    strahlerAngled: { label: 'Strahler schräg',  img: () => photos.strahlerAngled, size: () => SIZE.lichtAAngled },
+    strobe:         { label: 'Strobo',           img: () => photos.strobe,         size: () => SIZE.strobeSmall },
+    wallwasher:     { label: 'Wall Washer',      img: () => photos.wallwasher,     size: () => SIZE.wallwasher },
+  };
+
+  // Wo die drei Traversen im Plan stehen (Bildkoordinaten). Alle im Massstab 1:1 (k = 1).
+  const PLAN_LENS = [0.5, 1.0, 1.5];
+  const PLAN_BASE_Y = 400;
+  function planTrussRect(len){
+    const i = PLAN_LENS.indexOf(len);
+    const cx = [110, 300, 520][i];
+    const w = TRUSS_SIZE[len].w, h = TRUSS_SIZE[len].h;
+    return { x: cx - w / 2, y: PLAN_BASE_Y - h, w, h, cx };
+  }
+
+  function togglePlanMode(){
+    planMode = !planMode;
+    if(planMode && slotEditorOn) toggleSlotEditor();
+    const btn = document.getElementById('planModeBtn');
+    if(btn){
+      btn.classList.toggle('is-active', planMode);
+      btn.textContent = planMode ? 'Montage-Plan: fertig' : 'Montage-Plan';
+    }
+    const panel = document.getElementById('planPanel');
+    if(panel) panel.style.display = planMode ? 'block' : 'none';
+    prevRegistry = {}; flashAllowed = false;
+    renderStage();
+    updatePlanPanel();
+  }
+
+  function setPlanDevice(dev){ planDevice = dev; planDeleteMode = false; updatePlanPanel(); }
+  function togglePlanDelete(){ planDeleteMode = !planDeleteMode; updatePlanPanel(); }
+
+  function renderMountPlan(){
+    currentRegistry = {}; phase1Parts = []; SLOT_META = {};
+    let svg = '';
+    PLAN_LENS.forEach(len => {
+      const r = planTrussRect(len);
+      svg += `<image href="${TRUSS_IMG[len]}" xlink:href="${TRUSS_IMG[len]}" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}"/>`;
+      svg += `<text x="${r.cx}" y="${PLAN_BASE_Y + 18}" text-anchor="middle" font-size="13" fill="rgba(255,255,255,.75)" font-family="Segoe UI, Arial, sans-serif">${String(len).replace('.', ',')} m</text>`;
+      const perLen = MOUNT_PLAN[String(len)] || {};
+      Object.keys(perLen).forEach(dev => {
+        const spec = PLAN_DEVICES[dev];
+        if(!spec) return;
+        const sz = spec.size();
+        (perLen[dev] || []).forEach((pos, idx) => {
+          const cx = r.cx + pos.xRel, cy = r.y + (pos.yPct / 100) * r.h;
+          const rk = `plan:${len}:${dev}:${idx}`;
+          currentRegistry[rk] = { src: spec.img(), alt: dev, x: cx - sz.w / 2, y: cy - sz.h / 2, w: sz.w, h: sz.h };
+          const dim = (dev === planDevice) ? '1' : '.55';
+          svg += `<g data-regkey="${rk}" opacity="${dim}"><image href="${spec.img()}" xlink:href="${spec.img()}" x="${cx - sz.w / 2}" y="${cy - sz.h / 2}" width="${sz.w}" height="${sz.h}"><title>${spec.label}</title></image></g>`;
+        });
+      });
+    });
+    // Hinweis: Bühnenmitte liegt rechts — deshalb ist "nach rechts" = Richtung Mitte
+    svg += `<text x="640" y="30" text-anchor="end" font-size="12" fill="rgba(255,138,61,.9)" font-family="Segoe UI, Arial, sans-serif">Bühnenmitte →</text>`;
+    stageSvgEl.innerHTML = svg;
+    stageSvgEl.setAttribute('viewBox', '0 0 660 430');
+    const dj = document.getElementById('djLabel'); if(dj) dj.textContent = '';
+    const ex = document.getElementById('extraList'); if(ex) ex.innerHTML = '';
+  }
+
+  // Traverse unter einem Tippunkt im Plan finden
+  function planTrussAt(p){
+    for(let i = 0; i < PLAN_LENS.length; i++){
+      const len = PLAN_LENS[i], r = planTrussRect(len), pad = 26;
+      if(p.x >= r.x - pad && p.x <= r.x + r.w + pad && p.y >= r.y - pad && p.y <= r.y + r.h + pad) return { len, r };
+    }
+    return null;
+  }
+
+  function planAddAt(p){
+    const t = planTrussAt(p);
+    if(!t) return;
+    const key = String(t.len);
+    MOUNT_PLAN[key] = MOUNT_PLAN[key] || {};
+    MOUNT_PLAN[key][planDevice] = MOUNT_PLAN[key][planDevice] || [];
+    MOUNT_PLAN[key][planDevice].push({
+      xRel: +(p.x - t.r.cx).toFixed(1),
+      yPct: +(((p.y - t.r.y) / t.r.h) * 100).toFixed(1),
+    });
+    saveMountPlan(); renderMountPlan(); updatePlanPanel();
+  }
+
+  function planRemove(rk){
+    const parts = rk.split(':');           // plan:LEN:DEV:IDX
+    const len = parts[1], dev = parts[2], idx = parseInt(parts[3], 10);
+    if(MOUNT_PLAN[len] && MOUNT_PLAN[len][dev]) MOUNT_PLAN[len][dev].splice(idx, 1);
+    saveMountPlan(); renderMountPlan(); updatePlanPanel();
+  }
+
+  function clearPlanDevice(){
+    Object.keys(MOUNT_PLAN).forEach(len => { if(MOUNT_PLAN[len]) delete MOUNT_PLAN[len][planDevice]; });
+    saveMountPlan(); renderMountPlan(); updatePlanPanel();
+  }
+
+  function updatePlanPanel(){
+    const sel = document.getElementById('planDeviceBtns');
+    if(sel){
+      sel.innerHTML = Object.keys(PLAN_DEVICES).map(dev =>
+        `<button type="button" class="stage-tool-btn${dev === planDevice ? ' is-active' : ''}" onclick="setPlanDevice('${dev}')">${PLAN_DEVICES[dev].label}</button>`
+      ).join('');
+    }
+    const del = document.getElementById('planDeleteBtn');
+    if(del){
+      del.classList.toggle('is-active', planDeleteMode);
+      del.textContent = planDeleteMode ? 'Löschen: an' : 'Löschen';
+    }
+    const out = document.getElementById('planOut');
+    if(out){
+      let n = 0;
+      const lines = [];
+      PLAN_LENS.forEach(len => {
+        const per = MOUNT_PLAN[String(len)] || {};
+        Object.keys(PLAN_DEVICES).forEach(dev => {
+          const list = per[dev] || [];
+          if(list.length){ n += list.length; lines.push(String(len) + 'm · ' + PLAN_DEVICES[dev].label + ': ' + list.length + ' Plätze'); }
+        });
+      });
+      out.textContent = n
+        ? lines.join('\n') + '\n\nInsgesamt ' + n + ' Plätze. Mit „Zum Kopieren“ übertragen.'
+        : 'Gerät oben auswählen, dann auf eine Traverse tippen — dort erscheint es in echter Größe. So markierst Du alle Stellen, an denen dieses Gerät hängen kann.';
+    }
+  }
+
+  // Legt die kompletten Plandaten in die Zwischenablage — zum Einfügen im Chat.
+  function copyPlan(){
+    const txt = 'MONTAGEPLAN ' + JSON.stringify(MOUNT_PLAN);
+    const done = () => { const o = document.getElementById('planOut'); if(o) o.textContent = 'Kopiert! Jetzt im Chat einfügen.\n\n' + txt; };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(done, () => { const o = document.getElementById('planOut'); if(o) o.textContent = txt; });
+    } else {
+      const o = document.getElementById('planOut'); if(o) o.textContent = txt;
+    }
+  }
+
   // ---- Modus "Platz hinzufügen" ----
   // Tippen auf eine Traverse legt dort einen neuen Montagepunkt an. Der Punkt wird relativ zur
   // Traverse gespeichert (Hoehe in %, Abstand von der naeheren Kante) und gilt damit automatisch
@@ -1672,6 +1845,23 @@
 
   let dragState = null;
   function onSlotPointerDown(evt){
+    // --- Montage-Plan: setzen, loeschen oder verschieben ---
+    if(planMode){
+      const p = toSvgPoint(evt);
+      if(!p) return;
+      const g = evt.target.closest && evt.target.closest('g[data-regkey]');
+      const rk = g && g.getAttribute('data-regkey');
+      if(rk && rk.indexOf('plan:') === 0){
+        evt.preventDefault();
+        if(planDeleteMode){ planRemove(rk); return; }
+        const parts = rk.split(':');
+        const t = planTrussRect(parseFloat(parts[1]));
+        dragState = { planKey: rk, startX: p.x, startY: p.y, rect: t };
+        return;
+      }
+      if(!planDeleteMode){ evt.preventDefault(); planAddAt(p); }
+      return;
+    }
     if(!slotEditorOn) return;
     if(addSlotMode){
       const p = toSvgPoint(evt);
@@ -1698,6 +1888,21 @@
     const p = toSvgPoint(evt);
     if(!p) return;
     evt.preventDefault();
+
+    // --- Montage-Plan: gesetztes Geraet verschieben ---
+    if(dragState.planKey){
+      const parts = dragState.planKey.split(':');
+      const len = parts[1], dev = parts[2], idx = parseInt(parts[3], 10);
+      const list = (MOUNT_PLAN[len] || {})[dev];
+      if(list && list[idx]){
+        list[idx].xRel = +(p.x - dragState.rect.cx).toFixed(1);
+        list[idx].yPct = +(((p.y - dragState.rect.y) / dragState.rect.h) * 100).toFixed(1);
+        if(dragFrame) return;
+        dragFrame = requestAnimationFrame(() => { dragFrame = null; renderMountPlan(); });
+      }
+      return;
+    }
+
     // dxIn zaehlt Richtung Buehnenmitte — auf der rechten Seite ist das die andere Bildrichtung.
     const towardCenter = dragState.meta.side === 'left' ? 1 : -1;
     // Bewusst KEIN Raster: grob per Finger hinschieben reicht, die exakten Abstaende stellt
@@ -1716,8 +1921,10 @@
 
   function onSlotPointerUp(){
     if(!dragState) return;
+    const wasPlan = !!dragState.planKey;
     dragState = null;
     slotEditorDragging = false;
+    if(wasPlan){ saveMountPlan(); updatePlanPanel(); return; }
     saveSlotOverrides();
     prevRegistry = {};   // naechster normaler Render soll nicht alles als "verschoben" ausblenden
     updateSlotEditPanel();
@@ -1837,6 +2044,7 @@
   }
 
   function renderStage(){
+    if(planMode){ renderMountPlan(); return; }   // Montage-Plan statt Buehne
     const a = state.a, b = state.b, c = state.c, d = state.d, sub = state.sub, top = state.top, dj = state.dj;
     currentRegistry = {}; // Registry für diesen Render neu aufbauen
     phase1Parts = []; // Sammlung für die erste (unveränderte) Anzeige-Phase
