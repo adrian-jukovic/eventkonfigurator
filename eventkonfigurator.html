@@ -907,23 +907,24 @@
       out += svgImg(`strahlerOpp:${poleKey}`, photos.strahlerFront, 'Parstrahler', pX + strahler05ShiftX, pY + strahler05ShiftY, pf.w, pf.h, 0, null, true);
     }
 
-    // 1m-Traverse: bis zu 4 weitere Strahler — zwei Hoehen, je einer innen und einer aussen.
+    // 1m-Traverse: bis zu 4 weitere Strahler. Laut Nutzer-Markierung NICHT paarweise auf gleicher
+    // Hoehe (das wirkt wie eine starre Leiter), sondern treppenfoermig versetzt: unterster aussen,
+    // der naechste innen etwas hoeher, dann wieder aussen hoeher, usw. Jeder Platz hat deshalb eine
+    // eigene Hoehe statt zwei geteilter Ebenen.
     // Die beiden Aussenplaetze entfallen, wenn dort bereits Strobos haengen (outerFree === false);
-    // dann bleiben die 2 Innenplaetze.
+    // dann bleiben die 2 Innenplaetze (die behalten ihre Treppen-Hoehen).
     if(strahlerInnerCount > 0){
       const pf2 = { w: SIZE.lichtAFront.w * k, h: SIZE.lichtAFront.h * k };
-      // Zwei Hoehen im oberen/mittleren Bereich — darunter (ab ca. 72%) steht schon der
-      // angewinkelte Strahler im Fuss der Traverse.
-      const LEVEL_PCT = { top: 28, bottom: 56 };
+      // Treppe von unten nach oben; unterhalb ca. 72% steht schon der angewinkelte Strahler im Fuss.
       const SLOTS = outerFree
-        ? [{ l:'top', f:'outer' }, { l:'top', f:'inner' }, { l:'bottom', f:'outer' }, { l:'bottom', f:'inner' }]
-        : [{ l:'top', f:'inner' }, { l:'bottom', f:'inner' }];
+        ? [{ pct: 62, f:'outer' }, { pct: 50, f:'inner' }, { pct: 38, f:'outer' }, { pct: 26, f:'inner' }]
+        : [{ pct: 56, f:'inner' }, { pct: 30, f:'inner' }];
       SLOTS.slice(0, strahlerInnerCount).forEach(spot => {
-        const pY = trussY + (LEVEL_PCT[spot.l] / 100) * truss.h - pf2.h / 2;
+        const pY = trussY + (spot.pct / 100) * truss.h - pf2.h / 2;
         const pX = spot.f === 'inner'
           ? (side === 'left' ? trussX + truss.w - pf2.w - k * 1.6 : trussX + k * 1.6)
           : (side === 'left' ? trussX - pf2.w * 0.64 : trussX + truss.w - pf2.w * 0.36);
-        out += svgImg(`strahler1m:${poleKey}:${spot.l}:${spot.f}`, photos.strahlerFront, 'Parstrahler', pX, pY, pf2.w, pf2.h, 0, null, true);
+        out += svgImg(`strahler1m:${poleKey}:${spot.pct}:${spot.f}`, photos.strahlerFront, 'Parstrahler', pX, pY, pf2.w, pf2.h, 0, null, true);
       });
     }
 
@@ -1428,11 +1429,13 @@
       // äußere Ausgangsposition.
       // Alle drei Raenge um denselben Betrag — nur so bleiben die Abstaende 0,5m<->1m und
       // 1m<->1,5m gleich gross (43 / 41 px, exakt wie mit DJ-Pult).
-      // Steht ein DJ-Pult, bekommt die innerste (0,5m-)Position zusaetzlich Abstand zur Buehnenmitte:
-      // sonst hat der (Richtung Pult) verschobene Parstrahler auf dieser Traverse keinen Platz mehr
-      // und haengt im DJ-Pult-Bild. Betrifft die ganze Traverse inkl. allem, was darauf sitzt.
-      const DJ_INNER_GAP_EXTRA = 12;
-      const rankShiftByIdx = [RANK_SHIFT, RANK_SHIFT, RANK_SHIFT - (dj > 0 ? DJ_INNER_GAP_EXTRA : 0)];
+      // Steht ein DJ-Pult, wandert die KOMPLETTE Turmreihe pro Seite zusaetzlich nach aussen (links
+      // weiter nach links, rechts weiter nach rechts) — als geschlossenes Paket inkl. aller Geraete
+      // darauf. Dadurch waechst nur die Luecke zwischen DJ-Pult und 0,5m-Turm; die Abstaende der
+      // Tuerme untereinander bleiben unveraendert. Ohne diesen Zusatzabstand haengt der (Richtung
+      // Buehnenmitte versetzte) Parstrahler der 0,5m-Traverse im DJ-Pult-Bild.
+      const DJ_OUTWARD_SHIFT = dj > 0 ? 18 : 0;
+      const rankShiftByIdx = [RANK_SHIFT - DJ_OUTWARD_SHIFT, RANK_SHIFT - DJ_OUTWARD_SHIFT, RANK_SHIFT - DJ_OUTWARD_SHIFT];
       const rankX = {
         left:  POSITION_X.left.map((x, idx) => x + rankShiftByIdx[idx]),
         right: POSITION_X.right.map((x, idx) => x - rankShiftByIdx[idx]),
