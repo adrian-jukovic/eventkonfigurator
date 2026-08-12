@@ -362,6 +362,7 @@
       <pre class="slot-edit-out" id="planOut"></pre>
       <div class="stage-tools">
         <button type="button" class="stage-tool-btn" id="planDeleteBtn" onclick="togglePlanDelete()">Löschen</button>
+        <button type="button" class="stage-tool-btn" onclick="regularizePlan()">Vermitteln</button>
         <button type="button" class="stage-tool-btn" onclick="copyPlan()">Zum Kopieren</button>
         <button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="clearPlanDevice()">Dieses Gerät leeren</button>
       </div>
@@ -1712,6 +1713,63 @@
     const parts = rk.split(':');           // plan:LEN:DEV:IDX
     const len = parts[1], dev = parts[2], idx = parseInt(parts[3], 10);
     if(MOUNT_PLAN[len] && MOUNT_PLAN[len][dev]) MOUNT_PLAN[len][dev].splice(idx, 1);
+    saveMountPlan(); renderMountPlan(); updatePlanPanel();
+  }
+
+  // "Vermitteln": bringt die gesetzten Plaetze eines Geraets in eine saubere Ordnung, ohne den
+  // Aufbau zu veraendern:
+  //   - senkrecht: gleiche Abstaende von unten nach oben (unterste/oberste Reihe bleiben stehen)
+  //   - waagerecht: alle Lichter einer Spalte bekommen exakt dieselbe x-Position
+  // Lichter, die fast auf gleicher Hoehe sitzen (< ROW_TOL Prozent Unterschied), gelten als EINE
+  // Reihe und bekommen exakt dieselbe Hoehe — damit bleibt ein links/rechts-Paar ein Paar.
+  const ROW_TOL = 5;
+  function regularizePlanList(list){
+    if(!list || list.length < 2) return list;
+    const items = list.slice().sort((a, b) => a.yPct - b.yPct);
+
+    // --- Reihen bilden ---
+    const rows = [[items[0]]];
+    for(let i = 1; i < items.length; i++){
+      const prev = rows[rows.length - 1];
+      const refY = prev.reduce((s, e) => s + e.yPct, 0) / prev.length;
+      if(Math.abs(items[i].yPct - refY) < ROW_TOL) prev.push(items[i]);
+      else rows.push([items[i]]);
+    }
+
+    // --- Hoehen gleichmaessig verteilen ---
+    const firstY = rows[0].reduce((s, e) => s + e.yPct, 0) / rows[0].length;
+    const lastRow = rows[rows.length - 1];
+    const lastY = lastRow.reduce((s, e) => s + e.yPct, 0) / lastRow.length;
+    const stepY = rows.length > 1 ? (lastY - firstY) / (rows.length - 1) : 0;
+    rows.forEach((row, i) => {
+      const y = +(firstY + i * stepY).toFixed(1);
+      row.forEach(e => { e.yPct = y; });
+    });
+
+    // --- Spalten angleichen ---
+    const xs = items.map(e => e.xRel);
+    const mid = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2;
+    const spread = Math.max.apply(null, xs) - Math.min.apply(null, xs);
+    if(spread < 6){                       // faktisch eine Spalte
+      const avg = +(xs.reduce((s, v) => s + v, 0) / xs.length).toFixed(1);
+      items.forEach(e => { e.xRel = avg; });
+    } else {
+      const leftSide = items.filter(e => e.xRel < mid), rightSide = items.filter(e => e.xRel >= mid);
+      [leftSide, rightSide].forEach(grp => {
+        if(!grp.length) return;
+        const avg = +(grp.reduce((s, e) => s + e.xRel, 0) / grp.length).toFixed(1);
+        grp.forEach(e => { e.xRel = avg; });
+      });
+    }
+    return items;
+  }
+
+  function regularizePlan(){
+    Object.keys(MOUNT_PLAN).forEach(len => {
+      Object.keys(MOUNT_PLAN[len] || {}).forEach(dev => {
+        MOUNT_PLAN[len][dev] = regularizePlanList(MOUNT_PLAN[len][dev]);
+      });
+    });
     saveMountPlan(); renderMountPlan(); updatePlanPanel();
   }
 
