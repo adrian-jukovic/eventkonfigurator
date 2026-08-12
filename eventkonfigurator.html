@@ -1740,7 +1740,7 @@
         const per = MOUNT_PLAN[String(len)] || {};
         Object.keys(PLAN_DEVICES).forEach(dev => {
           const list = per[dev] || [];
-          if(list.length){ n += list.length; lines.push(String(len) + 'm · ' + PLAN_DEVICES[dev].label + ': ' + list.length + ' Plätze'); }
+          if(list.length){ n += list.length; lines.push(String(len).replace('.', ',') + 'm · ' + PLAN_DEVICES[dev].label + ': ' + list.length + (list.length === 1 ? ' Platz' : ' Plätze')); }
         });
       });
       out.textContent = n
