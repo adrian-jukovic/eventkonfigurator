@@ -146,6 +146,26 @@
   .lk-widget .stage-mini-label{
     font-size:.66rem !important;color:var(--muted) !important;letter-spacing:.03em;text-transform:uppercase;
   }
+
+  /* ---- Positions-Editor ---- */
+  .lk-widget .slot-edit-panel{
+    margin-top:10px; padding:10px 12px; border:1px solid var(--orange);
+    border-radius:12px; background:rgba(255,138,61,.08);
+  }
+  .lk-widget .slot-edit-hint{
+    margin:0 0 8px !important; font-size:.7rem !important; color:var(--muted) !important; line-height:1.45;
+  }
+  .lk-widget .slot-edit-out{
+    margin:0; padding:8px; max-height:150px; overflow:auto;
+    background:rgba(0,0,0,.35); border-radius:8px;
+    font-family:Consolas, monospace; font-size:.68rem !important; color:var(--white-ish) !important;
+    white-space:pre-wrap; word-break:break-word;
+  }
+  /* Im Bearbeiten-Modus: verschiebbare Geraete heben sich ab und reagieren auf Finger/Maus,
+     das Scrollen der Seite wird auf der Buehne unterdrueckt (sonst scrollt das Handy statt zu ziehen). */
+  .lk-widget svg.lk-slot-edit{ touch-action:none; cursor:grab; }
+  .lk-widget svg.lk-slot-edit g[data-regkey]{ cursor:grab; }
+  .lk-widget svg.lk-slot-edit g[data-regkey]:hover{ outline:1px dashed var(--orange); }
   .lk-widget .extra-list{margin-top:10px;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:64px;}
   .lk-widget .extra-list-row{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;}
 
@@ -320,7 +340,15 @@
     <p class="stage-caption" id="stageCaption">Vorschau eures Setups — füllt sich mit eurer Auswahl</p>
     <div class="stage-tools">
       <button type="button" class="stage-tool-btn" id="gridToggleBtn" onclick="toggleCoordGrid()">Koordinaten anzeigen</button>
+      <button type="button" class="stage-tool-btn" id="slotEditBtn" onclick="toggleSlotEditor()">Positionen bearbeiten</button>
       <button type="button" class="stage-tool-btn stage-tool-btn--danger" id="resetAllBtn" onclick="resetAllSelections()">Alles zurücksetzen</button>
+    </div>
+    <div class="slot-edit-panel" id="slotEditPanel" style="display:none">
+      <p class="slot-edit-hint">Licht antippen und ziehen — die Gegenseite bewegt sich automatisch spiegelbildlich mit. Traversen und Moving Heads lassen sich nicht verschieben.</p>
+      <pre class="slot-edit-out" id="slotEditOut"></pre>
+      <div class="stage-tools">
+        <button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="resetSlotOverrides()">Korrekturen verwerfen</button>
+      </div>
     </div>
     <div class="stage-tools stage-tools--ambient" id="ambientTools">
       <span class="stage-tool-label">Manuell in Ambientebeleuchtung:</span>
@@ -812,6 +840,18 @@
   // Vom Positions-Editor gesetzte Feinkorrekturen: { "1|par1m:3": { dxIn: 4, dy: -2 }, ... }
   // Leer = es gilt genau das, was oben im Katalog steht.
   let SLOT_OVERRIDES = {};
+  try {
+    const saved = window.localStorage && localStorage.getItem('lkSlotOverrides');
+    if(saved) SLOT_OVERRIDES = JSON.parse(saved) || {};
+  } catch(e){ SLOT_OVERRIDES = {}; }
+
+  // Zuordnung "gezeichnetes Geraet" -> "Katalog-Platz", wird bei jedem Render neu aufgebaut.
+  // Der Positions-Editor braucht sie, um ein angetipptes Bild dem richtigen Platz zuzuordnen.
+  let SLOT_META = {};
+  function markSlot(regKey, len, slotId, side){
+    SLOT_META[regKey] = { len, slotId, side };
+    return regKey;
+  }
 
   function findSlot(len, id){
     const list = SLOT_CATALOG[len] || [];
@@ -897,7 +937,9 @@
     // Aufleucht-Effekt beim Hinzufügen: dasselbe Bild noch einmal, aufgehellt, kurz sichtbar und dann
     // ausgeblendet — hat dadurch exakt dieselbe Kontur wie das Originalbild, kein künstlicher Rahmen.
     const flashMarkup = (isNew && src) ? `<image class="lk-flash-image" filter="url(#${flashStrong ? 'lkBrightenStrong' : 'lkBrighten'})" href="${src}" xlink:href="${src}" x="${x}" y="${y}" width="${w}" height="${h}"/>` : '';
-    const group = `<g${groupRot}>${imageMarkup}${flashMarkup}</g>`;
+    // data-regkey: erlaubt dem Positions-Editor, ein angetipptes Geraet seinem Katalog-Platz zuzuordnen
+    const regAttr = regKey ? ` data-regkey="${String(regKey).replace(/"/g, '&quot;')}"` : '';
+    const group = `<g${groupRot}${regAttr}>${imageMarkup}${flashMarkup}</g>`;
     if(!isNew && !moved) phase1Parts.push(group); // unverändert: darf schon in Phase 1 gezeigt werden
     return group;
   }
@@ -971,7 +1013,7 @@
       const stW = truss.w * 0.78; // etwas schmäler als vorher (0.9 → 0.78)
       const p = { w: stW, h: stW / RATIO.strahlerAngled };
       const b = slotBox(len, 'foot', slotCtx, p);
-      out += svgImg(`strahler:${poleKey}`, photos.strahlerAngled, 'Parstrahler', b.x, b.y, p.w, p.h, 0, null, true); // staerkeres Aufblinken: sitzt halb hinter der Traverse und geht sonst leicht unter
+      out += svgImg(markSlot(`strahler:${poleKey}`, len, 'foot', side), photos.strahlerAngled, 'Parstrahler', b.x, b.y, p.w, p.h, 0, null, true); // staerkeres Aufblinken: sitzt halb hinter der Traverse und geht sonst leicht unter
     }
 
     // Traverse (überlappt jetzt den unteren Teil des Strahlers)
@@ -991,7 +1033,7 @@
     filledPositions.forEach(pos => {
       const s = { w: SIZE.strobeSmall.w * k, h: SIZE.strobeSmall.h * k };
       const b = slotBox(len, 'strobe:' + pos, slotCtx, s);
-      out += svgImg(`strobe:${poleKey}:${pos}`, photos.strobe, 'Strobe', b.x, b.y, s.w, s.h);
+      out += svgImg(markSlot(`strobe:${poleKey}:${pos}`, len, 'strobe:' + pos, side), photos.strobe, 'Strobe', b.x, b.y, s.w, s.h);
     });
 
     // Zusaetzlicher Parstrahler auf 0,5m-Pfosten: gleiche Hoehe wie der (einzelne) Strobo, aber auf
@@ -1001,7 +1043,7 @@
       // Echtes Mass (22cm Durchmesser) statt an der Strobo-Groesse haengend — dadurch ca. 1,7x groesser.
       const pf = { w: SIZE.lichtAFront.w * k, h: SIZE.lichtAFront.h * k };
       const b = slotBox(len, 'parOpp', slotCtx, pf);
-      if(b) out += svgImg(`strahlerOpp:${poleKey}`, photos.strahlerFront, 'Parstrahler', b.x, b.y, pf.w, pf.h, 0, null, true);
+      if(b) out += svgImg(markSlot(`strahlerOpp:${poleKey}`, len, 'parOpp', side), photos.strahlerFront, 'Parstrahler', b.x, b.y, pf.w, pf.h, 0, null, true);
     }
 
     // 1m-Traverse: bis zu 4 weitere Strahler. Laut Nutzer-Markierung NICHT paarweise auf gleicher
@@ -1015,7 +1057,7 @@
       const order = outerFree ? PAR_1M_ORDER : PAR_1M_ORDER_INNER_ONLY;
       order.slice(0, strahlerInnerCount).forEach(slotId => {
         const b = slotBox(len, slotId, slotCtx, pf2);
-        if(b) out += svgImg(`strahler1m:${poleKey}:${slotId}`, photos.strahlerFront, 'Parstrahler', b.x, b.y, pf2.w, pf2.h, 0, null, true);
+        if(b) out += svgImg(markSlot(`strahler1m:${poleKey}:${slotId}`, len, slotId, side), photos.strahlerFront, 'Parstrahler', b.x, b.y, pf2.w, pf2.h, 0, null, true);
       });
     }
 
@@ -1025,7 +1067,7 @@
     if(hasWallwasher){
       const w = { w: SIZE.wallwasher.w * k, h: SIZE.wallwasher.h * k };
       const b = slotBox(len, 'wallwasher', slotCtx, w);
-      if(b) out += svgImg(`wallwasher:${poleKey}`, photos.wallwasher, 'Moving Wall Washer', b.x, b.y, w.w, w.h);
+      if(b) out += svgImg(markSlot(`wallwasher:${poleKey}`, len, 'wallwasher', side), photos.wallwasher, 'Moving Wall Washer', b.x, b.y, w.w, w.h);
     }
     return out;
   }
@@ -1322,6 +1364,117 @@
     return out;
   }
 
+  // ============================================================================
+  // POSITIONS-EDITOR
+  // Erlaubt es, jedes Geraet in der Vorschau direkt mit Maus/Finger an seinen Platz zu schieben,
+  // statt Koordinaten von Hand auszumessen. Verschoben wird dabei NICHT das einzelne Bild, sondern
+  // der KATALOG-PLATZ dahinter — die Korrektur gilt daher sofort auf beiden Seiten (spiegelbildlich
+  // symmetrisch) und in jeder Kombination, in der dieser Platz vorkommt.
+  // Am Ende gibt "Werte anzeigen" die fertigen Zahlen zum Uebernehmen in den Katalog aus.
+  // ============================================================================
+  let slotEditorOn = false;
+  let slotEditorDragging = false;
+
+  function saveSlotOverrides(){
+    try { localStorage.setItem('lkSlotOverrides', JSON.stringify(SLOT_OVERRIDES)); } catch(e){}
+  }
+
+  function toggleSlotEditor(){
+    slotEditorOn = !slotEditorOn;
+    const btn = document.getElementById('slotEditBtn');
+    if(btn){
+      btn.classList.toggle('is-active', slotEditorOn);
+      btn.textContent = slotEditorOn ? 'Positionen: fertig' : 'Positionen bearbeiten';
+    }
+    const panel = document.getElementById('slotEditPanel');
+    if(panel) panel.style.display = slotEditorOn ? 'block' : 'none';
+    stageSvgEl.classList.toggle('lk-slot-edit', slotEditorOn);
+    updateSlotEditPanel();
+  }
+
+  // Rechnet Bildschirm- in SVG-Koordinaten um (beruecksichtigt Skalierung/viewBox automatisch).
+  function toSvgPoint(evt){
+    const ctm = stageSvgEl.getScreenCTM();
+    if(!ctm) return null;
+    const pt = stageSvgEl.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    return pt.matrixTransform(ctm.inverse());
+  }
+
+  let dragState = null;
+  function onSlotPointerDown(evt){
+    if(!slotEditorOn) return;
+    const g = evt.target.closest && evt.target.closest('g[data-regkey]');
+    if(!g) return;
+    const meta = SLOT_META[g.getAttribute('data-regkey')];
+    if(!meta) return;              // z.B. Traverse/Moving Head: kein Katalog-Platz, nicht verschiebbar
+    const p = toSvgPoint(evt);
+    if(!p) return;
+    evt.preventDefault();
+    const key = meta.len + '|' + meta.slotId;
+    const cur = SLOT_OVERRIDES[key] || { dxIn: 0, dy: 0 };
+    dragState = { key, meta, startX: p.x, startY: p.y, baseDxIn: cur.dxIn || 0, baseDy: cur.dy || 0 };
+    slotEditorDragging = true;
+    if(g.setPointerCapture && evt.pointerId != null){ try { g.setPointerCapture(evt.pointerId); } catch(e){} }
+  }
+
+  let dragFrame = null;
+  function onSlotPointerMove(evt){
+    if(!dragState) return;
+    const p = toSvgPoint(evt);
+    if(!p) return;
+    evt.preventDefault();
+    // dxIn zaehlt Richtung Buehnenmitte — auf der rechten Seite ist das die andere Bildrichtung.
+    const towardCenter = dragState.meta.side === 'left' ? 1 : -1;
+    const dxIn = Math.round(dragState.baseDxIn + (p.x - dragState.startX) * towardCenter);
+    const dy = Math.round(dragState.baseDy + (p.y - dragState.startY));
+    SLOT_OVERRIDES[dragState.key] = { dxIn, dy };
+    if(dragFrame) return;                       // hoechstens ein Neuzeichnen pro Bildschirm-Frame
+    dragFrame = requestAnimationFrame(() => {
+      dragFrame = null;
+      flashAllowed = false;
+      renderStage();
+      updateSlotEditPanel();
+    });
+  }
+
+  function onSlotPointerUp(){
+    if(!dragState) return;
+    dragState = null;
+    slotEditorDragging = false;
+    saveSlotOverrides();
+    prevRegistry = {};   // naechster normaler Render soll nicht alles als "verschoben" ausblenden
+    updateSlotEditPanel();
+  }
+
+  function resetSlotOverrides(){
+    SLOT_OVERRIDES = {};
+    saveSlotOverrides();
+    prevRegistry = {};
+    flashAllowed = false;
+    renderStage();
+    updateSlotEditPanel();
+  }
+
+  // Zeigt die aktuellen Korrekturen als fertige Zahlen an — genau das, was in den Katalog gehoert.
+  function updateSlotEditPanel(){
+    const out = document.getElementById('slotEditOut');
+    if(!out) return;
+    const keys = Object.keys(SLOT_OVERRIDES).filter(k => {
+      const v = SLOT_OVERRIDES[k];
+      return v && ((v.dxIn || 0) !== 0 || (v.dy || 0) !== 0);
+    });
+    if(!keys.length){
+      out.textContent = 'Noch nichts verschoben. Tippe ein Licht an und zieh es an seinen Platz — die Gegenseite folgt automatisch spiegelbildlich.';
+      return;
+    }
+    out.textContent = keys.sort().map(k => {
+      const v = SLOT_OVERRIDES[k];
+      const parts = k.split('|');
+      return parts[0] + 'm · ' + parts[1] + ' → ' + (v.dxIn || 0) + ' Richtung Mitte, ' + (v.dy || 0) + ' nach unten';
+    }).join('\n');
+  }
+
   // Setzt alle Auswahlen auf 0 zurueck und leert die Vorschau komplett.
   function resetAllSelections(){
     allItems.forEach(i => { state[i.id] = i.min; });
@@ -1370,6 +1523,7 @@
     const a = state.a, b = state.b, c = state.c, d = state.d, sub = state.sub, top = state.top, dj = state.dj;
     currentRegistry = {}; // Registry für diesen Render neu aufbauen
     phase1Parts = []; // Sammlung für die erste (unveränderte) Anzeige-Phase
+    SLOT_META = {}; // Zuordnung Geraet -> Katalog-Platz fuer den Positions-Editor
 
     // Vom Nutzer manuell in die Ambientebeleuchtung verschobene Parstrahler werden von vornherein
     // aus der Traversen-Zuteilung herausgenommen (stehen aber unten in der Liste bereit).
@@ -1622,7 +1776,9 @@
     // Ausblenden-Overlay für alles, was im letzten Render noch da war und jetzt entweder weggefallen
     // oder verschoben ist — MUSS vor dem Registry-Wechsel gebaut werden, da es prevRegistry vs.
     // currentRegistry vergleicht.
-    const fadeOutSvg = buildFadeOutMarkup();
+    // Waehrend im Positions-Editor gezogen wird: kein Aus-/Einblenden, sonst flackert bei jedem
+    // Mausschritt die halbe Szene. Die Position soll dem Finger direkt folgen.
+    const fadeOutSvg = slotEditorDragging ? '' : buildFadeOutMarkup();
     const phase1Svg = phase1Parts.join('');
     prevRegistry = currentRegistry;
 
@@ -1725,6 +1881,15 @@
   // Container, der breiter als der sichtbare Bereich ist oder seitlich versetzt sitzt — dann steht
   // das Widget nicht mittig. Hier wird die tatsaechliche Lage gemessen und der Versatz ausgeglichen.
   // ============================================================================
+  // Positions-Editor an die Buehne binden (Maus UND Touch ueber Pointer-Events).
+  (function bindSlotEditor(){
+    if(!stageSvgEl || !window.PointerEvent) return;
+    stageSvgEl.addEventListener('pointerdown', onSlotPointerDown);
+    stageSvgEl.addEventListener('pointermove', onSlotPointerMove);
+    window.addEventListener('pointerup', onSlotPointerUp);
+    window.addEventListener('pointercancel', onSlotPointerUp);
+  })();
+
   (function preventDoubleTapZoom(){
     var el = document.querySelector('.lk-widget');
     if(!el) return;
