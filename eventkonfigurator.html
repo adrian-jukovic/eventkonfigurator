@@ -975,9 +975,12 @@
   // Positionen NACH RANG (0=am weitesten außen, 2=am weitesten innen), nicht mehr fest an eine
   // Traversenlänge gebunden — dadurch rückt z.B. die 1,5m-Traverse automatisch eine Stufe nach innen,
   // wenn die 1m-Traverse gerade nicht gebraucht wird (keine Lücke), und wieder raus, sobald sie zurückkommt.
+  // Abstaende der Tuerme untereinander (auf Wunsch je um 5 vergroessert): der innerste Turm (0,5m)
+  // bleibt an seinem Platz, die beiden aeusseren ruecken nach aussen.
+  // links: 259 -> 213 (Abstand 41 -> 46) -> 165 (Abstand 43 -> 48); rechts spiegelbildlich zu Mitte 350.
   const POSITION_X = {
-    left:  [175, 218, 259],
-    right: [525, 482, 441],
+    left:  [165, 213, 259],
+    right: [535, 487, 441],
   };
   const SLOT_BY_LEN = { 1.5: 'outer', 1.0: 'middle', 0.5: 'inner' };
 
