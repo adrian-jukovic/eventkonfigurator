@@ -347,9 +347,13 @@
       <p class="slot-edit-hint">Licht antippen und ziehen — die Gegenseite bewegt sich automatisch spiegelbildlich mit. <b>Höhen angleichen</b> macht nur die Abstände nach oben gleich und lässt die seitliche Lage in Ruhe (für Treppen-Anordnungen). <b>Seitlich ausrichten</b> stellt Lichter derselben Seite in eine Flucht.</p>
       <pre class="slot-edit-out" id="slotEditOut"></pre>
       <div class="stage-tools">
+        <button type="button" class="stage-tool-btn" id="addSlotBtn" onclick="toggleAddSlotMode()">Platz hinzufügen</button>
         <button type="button" class="stage-tool-btn" onclick="equalizeHeights()">Höhen angleichen</button>
         <button type="button" class="stage-tool-btn" onclick="alignSideways()">Seitlich ausrichten</button>
         <button type="button" class="stage-tool-btn" onclick="undoSlotChange()">Rückgängig</button>
+      </div>
+      <div class="stage-tools" id="slotDeleteList"></div>
+      <div class="stage-tools">
         <button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="resetSlotOverrides()">Korrekturen verwerfen</button>
       </div>
     </div>
@@ -868,8 +872,24 @@
     return regKey;
   }
 
+  // ---- Selbst angelegte Montagepunkte (aus dem Editor, Modus "Platz hinzufügen") ----
+  // Gleiche Struktur wie die Katalog-Plaetze. Sobald sie feststehen, werden sie fest in den
+  // Katalog oben uebernommen; bis dahin liegen sie im Browser-Speicher.
+  let CUSTOM_SLOTS = {};   // { "1": [ {id,anchor,yPct,off,...}, ... ], ... }
+  try {
+    const savedC = localStorage.getItem('lkCustomSlots');
+    if(savedC) CUSTOM_SLOTS = JSON.parse(savedC) || {};
+  } catch(e){ CUSTOM_SLOTS = {}; }
+  function saveCustomSlots(){
+    try { localStorage.setItem('lkCustomSlots', JSON.stringify(CUSTOM_SLOTS)); } catch(e){}
+  }
+  // Alle Plaetze einer Traverse: fest im Katalog + selbst angelegte
+  function allSlots(len){
+    return (SLOT_CATALOG[len] || []).concat(CUSTOM_SLOTS[len] || []);
+  }
+
   function findSlot(len, id){
-    const list = SLOT_CATALOG[len] || [];
+    const list = allSlots(len);
     for(let i = 0; i < list.length; i++) if(list[i].id === id) return list[i];
     return null;
   }
@@ -1104,6 +1124,28 @@
       const w = { w: SIZE.wallwasher.w * k, h: SIZE.wallwasher.h * k };
       const b = slotBox(len, 'wallwasher', slotCtx, w);
       if(b) out += svgImg(markSlot(`wallwasher:${poleKey}`, len, 'wallwasher', side), photos.wallwasher, 'Moving Wall Washer', b.x, b.y, w.w, w.h);
+    }
+
+    // ---- Im Editor: ALLE Montagepunkte dieser Traverse sichtbar machen, auch die gerade freien ----
+    // So sieht man auf einen Blick, wo ueberhaupt etwas haengen kann, und kann jeden Punkt anfassen.
+    if(slotEditorOn){
+      const shownIds = {};
+      Object.keys(SLOT_META).forEach(rk => {
+        const m = SLOT_META[rk];
+        if(m.len === len && m.side === side) shownIds[m.slotId] = true;
+      });
+      const marker = { w: 9, h: 9 };
+      allSlots(len).forEach(sl => {
+        if(shownIds[sl.id]) return;                       // dort haengt schon ein Geraet
+        const b = slotBox(len, sl.id, slotCtx, marker);
+        if(!b) return;
+        const rk = `slotmark:${poleKey}:${sl.id}`;
+        markSlot(rk, len, sl.id, side);
+        currentRegistry[rk] = { src: null, alt: sl.id, x: b.x, y: b.y, w: marker.w, h: marker.h };
+        const isCustom = (CUSTOM_SLOTS[len] || []).some(s => s.id === sl.id);
+        const col = isCustom ? '#5ad2a0' : '#ff8a3d';
+        out += `<g data-regkey="${rk}" class="lk-slot-marker"><circle cx="${b.x + marker.w / 2}" cy="${b.y + marker.h / 2}" r="${marker.w / 2}" fill="${col}" fill-opacity=".55" stroke="${col}" stroke-width="1"><title>${sl.id}</title></circle></g>`;
+      });
     }
     return out;
   }
@@ -1529,9 +1571,81 @@
     return pt.matrixTransform(ctm.inverse());
   }
 
+  // ---- Modus "Platz hinzufügen" ----
+  // Tippen auf eine Traverse legt dort einen neuen Montagepunkt an. Der Punkt wird relativ zur
+  // Traverse gespeichert (Hoehe in %, Abstand von der naeheren Kante) und gilt damit automatisch
+  // in jeder Kombination — genau wie die fest hinterlegten Plaetze.
+  let addSlotMode = false;
+  function toggleAddSlotMode(){
+    addSlotMode = !addSlotMode;
+    if(addSlotMode && !slotEditorOn) toggleSlotEditor();
+    const btn = document.getElementById('addSlotBtn');
+    if(btn){
+      btn.classList.toggle('is-active', addSlotMode);
+      btn.textContent = addSlotMode ? 'Platz hinzufügen: an' : 'Platz hinzufügen';
+    }
+    updateSlotEditPanel();
+  }
+
+  // Findet die Traverse, auf die getippt wurde (inkl. etwas Rand drumherum).
+  function trussAtPoint(p){
+    let best = null;
+    Object.keys(currentRegistry).forEach(k => {
+      if(k.indexOf('truss:') !== 0) return;
+      const t = currentRegistry[k], pad = 14;
+      if(p.x >= t.x - pad && p.x <= t.x + t.w + pad && p.y >= t.y - pad && p.y <= t.y + t.h + pad){
+        const parts = k.slice(6).split('-');
+        best = { side: parts[0], len: parseFloat(parts[1]), rect: t };
+      }
+    });
+    return best;
+  }
+
+  function addSlotAt(p){
+    const tr = trussAtPoint(p);
+    if(!tr){ alert('Bitte direkt auf eine Traverse tippen.'); return; }
+    // Tiefen-Skalierung dieser Traverse zurueckrechnen, damit der Platz auf allen Traversen passt
+    const k = tr.rect.h / TRUSS_SIZE[tr.len].h;
+    const innerEdge = tr.side === 'left' ? tr.rect.x + tr.rect.w : tr.rect.x;
+    const outerEdge = tr.side === 'left' ? tr.rect.x : tr.rect.x + tr.rect.w;
+    const useInner = Math.abs(p.x - innerEdge) <= Math.abs(p.x - outerEdge);
+    const edge = useInner ? innerEdge : outerEdge;
+    const toCenter = tr.side === 'left' ? 1 : -1;
+    const inward = useInner ? -toCenter : toCenter;
+    const key = String(tr.len);
+    CUSTOM_SLOTS[key] = CUSTOM_SLOTS[key] || [];
+    const nr = CUSTOM_SLOTS[key].length + 1;
+    CUSTOM_SLOTS[key].push({
+      id: 'p' + nr,
+      device: 'strahlerFront',
+      anchor: useInner ? 'inner' : 'outer',
+      yPct: +(((p.y - tr.rect.y) / tr.rect.h) * 100).toFixed(1),
+      offW: 0,
+      off: +(((p.x - edge) * inward) / k).toFixed(1),
+    });
+    saveCustomSlots();
+    prevRegistry = {}; flashAllowed = false;
+    renderStage();
+    updateSlotEditPanel();
+  }
+
+  function deleteCustomSlot(len, id){
+    const list = CUSTOM_SLOTS[len] || [];
+    CUSTOM_SLOTS[len] = list.filter(s => s.id !== id);
+    delete SLOT_OVERRIDES[len + '|' + id];
+    saveCustomSlots(); saveSlotOverrides();
+    prevRegistry = {}; flashAllowed = false;
+    renderStage(); updateSlotEditPanel();
+  }
+
   let dragState = null;
   function onSlotPointerDown(evt){
     if(!slotEditorOn) return;
+    if(addSlotMode){
+      const p = toSvgPoint(evt);
+      if(p){ evt.preventDefault(); addSlotAt(p); }
+      return;
+    }
     const g = evt.target.closest && evt.target.closest('g[data-regkey]');
     if(!g) return;
     const meta = SLOT_META[g.getAttribute('data-regkey')];
@@ -1590,19 +1704,54 @@
   function updateSlotEditPanel(){
     const out = document.getElementById('slotEditOut');
     if(!out) return;
+    let txt = '';
+
+    if(addSlotMode){
+      txt += '● Platz-hinzufügen ist AN — tippe auf eine Traverse, um dort einen Montagepunkt anzulegen.\n\n';
+    }
+
+    // --- selbst angelegte Montagepunkte ---
+    const customLens = Object.keys(CUSTOM_SLOTS).filter(l => (CUSTOM_SLOTS[l] || []).length);
+    if(customLens.length){
+      txt += 'EIGENE MONTAGEPUNKTE (grün):\n';
+      customLens.sort().forEach(l => {
+        CUSTOM_SLOTS[l].forEach(s => {
+          const ov = SLOT_OVERRIDES[l + '|' + s.id] || {};
+          txt += '  ' + l + 'm · ' + s.id + ' · ' + (s.anchor === 'inner' ? 'innen' : 'außen') +
+                 ' · Höhe ' + (+(s.yPct + ((ov.dy || 0) / TRUSS_SIZE[l].h) * 100).toFixed(1)) + '%' +
+                 ' · Abstand ' + (+(s.off + (ov.dxIn || 0) * (s.anchor === 'inner' ? -1 : 1)).toFixed(1)) + '\n';
+        });
+      });
+      txt += '\n';
+    }
+
+    // --- verschobene Katalog-Plaetze ---
     const keys = Object.keys(SLOT_OVERRIDES).filter(k => {
       const v = SLOT_OVERRIDES[k];
-      return v && ((v.dxIn || 0) !== 0 || (v.dy || 0) !== 0);
+      if(!v || ((v.dxIn || 0) === 0 && (v.dy || 0) === 0)) return false;
+      const len = k.split('|')[0];
+      return !(CUSTOM_SLOTS[len] || []).some(s => s.id === k.split('|')[1]);
     });
-    if(!keys.length){
-      out.textContent = 'Noch nichts verschoben. Tippe ein Licht an und zieh es an seinen Platz — die Gegenseite folgt automatisch spiegelbildlich.';
-      return;
+    if(keys.length){
+      txt += 'VERSCHOBENE PLÄTZE:\n';
+      txt += keys.sort().map(k => {
+        const v = SLOT_OVERRIDES[k], parts = k.split('|');
+        return '  ' + parts[0] + 'm · ' + parts[1] + ' → ' + (v.dxIn || 0) + ' Richtung Mitte, ' + (v.dy || 0) + ' nach unten';
+      }).join('\n');
     }
-    out.textContent = keys.sort().map(k => {
-      const v = SLOT_OVERRIDES[k];
-      const parts = k.split('|');
-      return parts[0] + 'm · ' + parts[1] + ' → ' + (v.dxIn || 0) + ' Richtung Mitte, ' + (v.dy || 0) + ' nach unten';
-    }).join('\n');
+
+    out.textContent = txt.trim() ||
+      'Im Editor sind alle Montagepunkte als Punkte sichtbar: orange = fest hinterlegt, grün = selbst angelegt.\nLichter oder Punkte antippen und ziehen. Über „Platz hinzufügen“ legst Du neue an.';
+
+    // --- Löschknöpfe für eigene Punkte ---
+    const del = document.getElementById('slotDeleteList');
+    if(del){
+      del.innerHTML = customLens.length
+        ? customLens.sort().map(l => (CUSTOM_SLOTS[l] || []).map(s =>
+            `<button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="deleteCustomSlot('${l}','${s.id}')">✕ ${l}m ${s.id}</button>`
+          ).join('')).join('')
+        : '';
+    }
   }
 
   // Setzt alle Auswahlen auf 0 zurueck und leert die Vorschau komplett.
