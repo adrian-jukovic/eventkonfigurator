@@ -846,7 +846,7 @@
 
   const RANK_SLOT = ['outer', 'middle', 'inner']; // Rang 0/1/2 → Tiefen-Konfiguration
 
-  function svgPole(len, side, slotX, rank, filledPositions, hasStrahler, hasWallwasher, hasMovingHead, hasStrahlerOpp, strahlerInnerCount, outerFree){
+  function svgPole(len, side, slotX, rank, filledPositions, hasStrahler, hasWallwasher, hasMovingHead, hasStrahlerOpp, strahlerInnerCount, outerFree, hasDj){
     const poleKey = `${side}-${len}`;
     const slot = RANK_SLOT[rank];
     const { scale: k, lift } = DEPTH[slot];
@@ -861,8 +861,10 @@
     // Auf der 0,5m-Traverse sitzen die Parstrahler laut Nutzer-Markierung (Koordinatenraster) je
     // 12 zu weit aussen und 12 zu weit oben -- ruecken deshalb 12 Richtung Buehnenmitte und 12 nach
     // unten. Betrifft beide Parstrahler-Stellen auf dieser Traverse (hasStrahler + hasStrahlerOpp).
-    const strahler05ShiftX = len === 0.5 ? (side === 'left' ? 12 : -12) : 0;
-    const strahler05ShiftY = len === 0.5 ? 12 : 0;
+    // NICHT anwenden, wenn ein DJ-Pult steht: die 0,5m-Traverse rueckt dann naeher an die Buehnenmitte
+    // heran (kein RANK_SHIFT-Ausgleich mehr), der Verschub wuerde den Strahler ins DJ-Pult schieben.
+    const strahler05ShiftX = (len === 0.5 && !hasDj) ? (side === 'left' ? 12 : -12) : 0;
+    const strahler05ShiftY = (len === 0.5 && !hasDj) ? 12 : 0;
 
     // Parstrahler ZUERST zeichnen (= hintere Ebene), damit die Traverse optisch darüber liegt und der
     // Strahler wie in echt "in" der Traverse steht, statt frei davor zu schweben. Höhe = Höhe der Traverse
@@ -1437,7 +1439,7 @@
           const key = `${spec.side}-${spec.len}`;
           const rank = 2 - i;
           const slotX = rankX[sideName][rank];
-          svg += svgPole(spec.len, spec.side, slotX, rank, poleStrobes[key] || [], !!poleHasStrahler[key], !!poleHasWallwasher[key], headKeys.has(key), !!poleHasStrahlerOpp[key], poleStrahlerInnerCount[key] || 0, !!pole1mOuterFree[key]);
+          svg += svgPole(spec.len, spec.side, slotX, rank, poleStrobes[key] || [], !!poleHasStrahler[key], !!poleHasWallwasher[key], headKeys.has(key), !!poleHasStrahlerOpp[key], poleStrahlerInnerCount[key] || 0, !!pole1mOuterFree[key], dj > 0);
         });
       });
     } else if(b >= 7){
