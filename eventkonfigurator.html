@@ -846,7 +846,7 @@
 
   const RANK_SLOT = ['outer', 'middle', 'inner']; // Rang 0/1/2 → Tiefen-Konfiguration
 
-  function svgPole(len, side, slotX, rank, filledPositions, hasStrahler, hasWallwasher, hasMovingHead, hasStrahlerOpp, strahlerInnerCount, outerFree, hasDj){
+  function svgPole(len, side, slotX, rank, filledPositions, hasStrahler, hasWallwasher, hasMovingHead, hasStrahlerOpp, strahlerInnerCount, outerFree){
     const poleKey = `${side}-${len}`;
     const slot = RANK_SLOT[rank];
     const { scale: k, lift } = DEPTH[slot];
@@ -861,10 +861,10 @@
     // Auf der 0,5m-Traverse sitzen die Parstrahler laut Nutzer-Markierung (Koordinatenraster) je
     // 12 zu weit aussen und 12 zu weit oben -- ruecken deshalb 12 Richtung Buehnenmitte und 12 nach
     // unten. Betrifft beide Parstrahler-Stellen auf dieser Traverse (hasStrahler + hasStrahlerOpp).
-    // NICHT anwenden, wenn ein DJ-Pult steht: die 0,5m-Traverse rueckt dann naeher an die Buehnenmitte
-    // heran (kein RANK_SHIFT-Ausgleich mehr), der Verschub wuerde den Strahler ins DJ-Pult schieben.
-    const strahler05ShiftX = (len === 0.5 && !hasDj) ? (side === 'left' ? 12 : -12) : 0;
-    const strahler05ShiftY = (len === 0.5 && !hasDj) ? 12 : 0;
+    // Gilt immer (auch mit DJ-Pult) -- dafuer bekommt die ganze Traverse mit DJ-Pult zusaetzlichen
+    // Abstand zur Buehnenmitte (siehe DJ_INNER_GAP_EXTRA weiter oben), damit trotzdem genug Platz ist.
+    const strahler05ShiftX = len === 0.5 ? (side === 'left' ? 12 : -12) : 0;
+    const strahler05ShiftY = len === 0.5 ? 12 : 0;
 
     // Parstrahler ZUERST zeichnen (= hintere Ebene), damit die Traverse optisch darüber liegt und der
     // Strahler wie in echt "in" der Traverse steht, statt frei davor zu schweben. Höhe = Höhe der Traverse
@@ -1428,7 +1428,11 @@
       // äußere Ausgangsposition.
       // Alle drei Raenge um denselben Betrag — nur so bleiben die Abstaende 0,5m<->1m und
       // 1m<->1,5m gleich gross (43 / 41 px, exakt wie mit DJ-Pult).
-      const rankShiftByIdx = [RANK_SHIFT, RANK_SHIFT, RANK_SHIFT];
+      // Steht ein DJ-Pult, bekommt die innerste (0,5m-)Position zusaetzlich Abstand zur Buehnenmitte:
+      // sonst hat der (Richtung Pult) verschobene Parstrahler auf dieser Traverse keinen Platz mehr
+      // und haengt im DJ-Pult-Bild. Betrifft die ganze Traverse inkl. allem, was darauf sitzt.
+      const DJ_INNER_GAP_EXTRA = 12;
+      const rankShiftByIdx = [RANK_SHIFT, RANK_SHIFT, RANK_SHIFT - (dj > 0 ? DJ_INNER_GAP_EXTRA : 0)];
       const rankX = {
         left:  POSITION_X.left.map((x, idx) => x + rankShiftByIdx[idx]),
         right: POSITION_X.right.map((x, idx) => x - rankShiftByIdx[idx]),
@@ -1439,7 +1443,7 @@
           const key = `${spec.side}-${spec.len}`;
           const rank = 2 - i;
           const slotX = rankX[sideName][rank];
-          svg += svgPole(spec.len, spec.side, slotX, rank, poleStrobes[key] || [], !!poleHasStrahler[key], !!poleHasWallwasher[key], headKeys.has(key), !!poleHasStrahlerOpp[key], poleStrahlerInnerCount[key] || 0, !!pole1mOuterFree[key], dj > 0);
+          svg += svgPole(spec.len, spec.side, slotX, rank, poleStrobes[key] || [], !!poleHasStrahler[key], !!poleHasWallwasher[key], headKeys.has(key), !!poleHasStrahlerOpp[key], poleStrahlerInnerCount[key] || 0, !!pole1mOuterFree[key]);
         });
       });
     } else if(b >= 7){
