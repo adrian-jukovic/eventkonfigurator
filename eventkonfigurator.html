@@ -364,6 +364,7 @@
         <button type="button" class="stage-tool-btn" id="planDeleteBtn" onclick="togglePlanDelete()">Löschen</button>
         <button type="button" class="stage-tool-btn" onclick="regularizePlan()">Vermitteln</button>
         <button type="button" class="stage-tool-btn" onclick="copyPlan()">Zum Kopieren</button>
+        <button type="button" class="stage-tool-btn" onclick="importPlan()">Einfügen</button>
         <button type="button" class="stage-tool-btn stage-tool-btn--danger" onclick="clearPlanDevice()">Dieses Gerät leeren</button>
       </div>
     </div>
@@ -1804,6 +1805,24 @@
       out.textContent = n
         ? lines.join('\n') + '\n\nInsgesamt ' + n + ' Plätze. Mit „Zum Kopieren“ übertragen.'
         : 'Gerät oben auswählen, dann auf eine Traverse tippen — dort erscheint es in echter Größe. So markierst Du alle Stellen, an denen dieses Gerät hängen kann.';
+    }
+  }
+
+  // Liest einen kopierten Montageplan wieder ein (z.B. den zusammengefuehrten Stand aus dem Chat).
+  // Damit geht nichts verloren, wenn zwischendurch etwas geleert wurde oder auf einem anderen
+  // Geraet weitergearbeitet wird.
+  function importPlan(){
+    const raw = prompt('Kopierten Montageplan hier einfügen:');
+    if(!raw) return;
+    try {
+      const json = raw.replace(/^\s*MONTAGEPLAN\s*/, '').trim();
+      const parsed = JSON.parse(json);
+      if(!parsed || typeof parsed !== 'object') throw new Error('kein Plan');
+      MOUNT_PLAN = parsed;
+      saveMountPlan();
+      if(!planMode) togglePlanMode(); else { renderMountPlan(); updatePlanPanel(); }
+    } catch(e){
+      alert('Das war kein gültiger Montageplan. Bitte den kompletten Text ab „MONTAGEPLAN“ einfügen.');
     }
   }
 
