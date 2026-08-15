@@ -1580,6 +1580,11 @@
     },
   };
 
+  // Harte Obergrenze fuer die GESAMTE Traverse (beide Montagepunkte zusammen) — Adrian hat an der
+  // echten Traverse geprueft, wie viel Strobos dort wirklich mit ausreichend Abstand drauf passen;
+  // unabhaengig von der rechnerischen Platzkapazitaet der einzelnen Zonen.
+  const ZONE_TOTAL_MAX = { strobe: { '1': 2, '1.5': 3 } };
+
   // Wie viele Geraete passen hoechstens ohne Ueberlappen in eine Zone (bei gegebener Tiefenskala)?
   function zoneCapacity(zone, trussHpx, devHpx){
     const spanPx = Math.abs((zone.yEnd - zone.yStart) / 100) * trussHpx;
@@ -1589,10 +1594,13 @@
   // Verteilt `count` Geraete gleichmaessig ueber die Zonen eines Geraetetyps an einer Traversenlaenge
   // — rundenweise auf die Zonen, damit bei ungerader Anzahl keine Zone leer bleibt. Wird komplett neu
   // berechnet, sobald sich `count` aendert (dynamisch, keine feste Punkteliste). Reicht die
-  // Gesamtkapazitaet nicht aus, werden weniger als `count` Punkte zurueckgegeben.
+  // Gesamtkapazitaet nicht aus (oder greift ZONE_TOTAL_MAX), werden weniger als `count` Punkte
+  // zurueckgegeben.
   function zonePoints(len, device, count, trussHpx, devHpx){
     const zones = ((MOUNT_PLAN[String(len)] || {})[device]) || [];
     if(!zones.length || count <= 0) return [];
+    const totalMax = (ZONE_TOTAL_MAX[device] || {})[String(len)];
+    if(totalMax != null) count = Math.min(count, totalMax);
     const caps = zones.map(z => zoneCapacity(z, trussHpx, devHpx));
     const per = zones.map(() => 0);
     let remaining = count, progress = true;
@@ -1937,15 +1945,21 @@
       if(!p) return;
       const g = evt.target.closest && evt.target.closest('g[data-regkey]');
       const rk = g && g.getAttribute('data-regkey');
-      if(rk && rk.indexOf('plan:') === 0){
+      const parts = (rk && rk.indexOf('plan:') === 0) ? rk.split(':') : null;
+      if(planDeleteMode){
+        if(parts){ evt.preventDefault(); planRemove(rk); }
+        return;
+      }
+      // Nur ein Punkt/eine Zone DESSELBEN Geraets (aktuell ausgewaehlt) faengt den Klick zum
+      // Verschieben ab — liegt darunter ein ANDERES Geraet (z.B. Strahler beim Setzen von Strobo),
+      // wird das ignoriert und ganz normal ein neuer Punkt fuer das aktuelle Geraet gesetzt.
+      if(parts && parts[2] === planDevice){
         evt.preventDefault();
-        if(planDeleteMode){ planRemove(rk); return; }
-        const parts = rk.split(':');
         const t = planTrussRect(parseFloat(parts[1]));
         dragState = { planKey: rk, startX: p.x, startY: p.y, rect: t };
         return;
       }
-      if(!planDeleteMode){ evt.preventDefault(); planAddAt(p); }
+      evt.preventDefault(); planAddAt(p);
       return;
     }
     if(!slotEditorOn) return;
