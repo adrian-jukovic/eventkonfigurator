@@ -155,6 +155,14 @@
   .lk-widget .slot-edit-hint{
     margin:0 0 8px !important; font-size:.7rem !important; color:var(--muted) !important; line-height:1.45;
   }
+  .lk-widget .plan-status{
+    margin:0 0 8px !important; padding:7px 10px; border-radius:8px; font-size:.75rem !important;
+    font-weight:700 !important; display:none;
+  }
+  .lk-widget .plan-status.is-pending{
+    display:block; background:rgba(90,210,160,.16); color:#5ad2a0 !important;
+    border:1px solid rgba(90,210,160,.4);
+  }
   .lk-widget .slot-edit-out{
     margin:0; padding:8px; max-height:150px; overflow:auto;
     background:rgba(0,0,0,.35); border-radius:8px;
@@ -359,6 +367,7 @@
     <div class="slot-edit-panel" id="planPanel" style="display:none">
       <p class="slot-edit-hint">Hier wird einmalig festgelegt, wo welches Gerät überhaupt hängen kann. <b>Strahler (hängend) und Strobo sind Bereiche:</b> ersten Punkt tippen (Start), zweiten Punkt tippen (Ende, gleiche Stelle wie Start, nur höher/tiefer) — dazwischen wird die tatsächliche Stückzahl später automatisch gleichmäßig verteilt und passt sich an, wenn sich die Anzahl ändert. <b>Fuß-Strahler und Wall Washer</b> bleiben Einzelpunkte: einmal tippen genügt. Gesetztes lässt sich verschieben; „Löschen“ an, dann antippen zum Entfernen. Die Bühnenmitte liegt rechts — die linke Seite ergibt sich automatisch spiegelbildlich.</p>
       <div class="stage-tools" id="planDeviceBtns"></div>
+      <p class="plan-status" id="planStatus"></p>
       <pre class="slot-edit-out" id="planOut"></pre>
       <div class="stage-tools">
         <button type="button" class="stage-tool-btn" id="planDeleteBtn" onclick="togglePlanDelete()">Löschen</button>
@@ -1734,6 +1743,7 @@
       if(!pendingZoneStart || pendingZoneStart.len !== t.len){
         pendingZoneStart = { len: t.len, xRel, yPct };
         renderMountPlan();
+        updatePlanPanel();
         return;
       }
       MOUNT_PLAN[key][planDevice].push({ xRel: pendingZoneStart.xRel, yStart: pendingZoneStart.yPct, yEnd: yPct });
@@ -1764,6 +1774,17 @@
   }
 
   function updatePlanPanel(){
+    const status = document.getElementById('planStatus');
+    if(status){
+      if(pendingZoneStart){
+        status.classList.add('is-pending');
+        status.textContent = '● Start gesetzt bei ' + Math.round(pendingZoneStart.yPct) + '% Höhe auf der '
+          + String(pendingZoneStart.len).replace('.', ',') + 'm-Traverse — jetzt den zweiten Punkt (Ende) tippen, gleiche Seite, andere Höhe.';
+      } else {
+        status.classList.remove('is-pending');
+        status.textContent = '';
+      }
+    }
     const sel = document.getElementById('planDeviceBtns');
     if(sel){
       sel.innerHTML = Object.keys(PLAN_DEVICES).map(dev =>
