@@ -796,10 +796,6 @@
     4: { 'left-1.5': ['top', 'bottom'], 'right-1.5': ['top', 'bottom'] },
     6: { 'left-1.5': ['top', 'middle', 'bottom'], 'right-1.5': ['top', 'middle', 'bottom'] },
   };
-  // Feste Prozent-Positionen je Slot-Name (oben tiefer gesetzt, damit es nicht in den Moving Head reinragt;
-  // Mitte liegt genau zwischen oben und unten)
-  const STROBE_POS_PCT = { top: 24, middle: 54, bottom: 84, only: 50 };
-
   const TRUSS_IMG = { 0.5: photos.truss05, 1.0: photos.truss10, 1.5: photos.truss15 };
 
   // ===================== STECKPLATZ-KATALOG =====================
@@ -826,52 +822,15 @@
   // Die Werte lassen sich im Positions-Editor (Button "Positionen bearbeiten") direkt per
   // Maus/Finger verschieben; der Editor gibt die fertigen Zahlen zum Eintragen wieder aus.
 
-  // Geometrie der Strobo-Plaetze (gilt fuer alle Traversenlaengen, nur die Hoehe unterscheidet sich)
-  const STROBE_SLOT_GEOM = { device: 'strobe', anchor: 'outer', offW: 1 / 6, off: -0.15 };
-
-  // Baut die Plaetze, die es an JEDER Traverse gibt (Fuss-Strahler + die vier Strobo-Hoehen).
-  function commonSlots(len){
-    const is05 = len === 0.5;
-    const slots = [
-      // Angewinkelter Parstrahler, steht im Fuss der Traverse (strahlt nach oben).
-      // Auf der 0,5m-Traverse laut Nutzer-Markierung 12 Richtung Mitte und 12 nach unten versetzt.
-      { id: 'foot', device: 'strahlerAngled', anchor: 'foot', dxIn: is05 ? 12 : 0, dy: is05 ? 12 : 0 },
-    ];
-    Object.keys(STROBE_POS_PCT).forEach(pos => {
-      slots.push(Object.assign({ id: 'strobe:' + pos, yPct: STROBE_POS_PCT[pos] }, STROBE_SLOT_GEOM));
-    });
-    return slots;
-  }
-
+  // Strahler, Strobo und ihre Positionen kommen jetzt aus dem Montage-Plan (MOUNT_PLAN, siehe unten) —
+  // der Katalog hier traegt nur noch den Moving Wall Washer, dessen Platz unveraendert bleibt.
   const SLOT_CATALOG = {
-    0.5: commonSlots(0.5).concat([
-      // Zusaetzlicher Parstrahler gegenueber vom Strobo (Innenseite), nach vorne strahlend.
-      { id: 'parOpp', device: 'strahlerFront', anchor: 'inner', yPct: 26, offW: 0.5, off: 0.25, dxIn: 12, dy: 12 },
-    ]),
-    1.0: commonSlots(1.0).concat([
-      // Vier Parstrahler treppenfoermig versetzt (nicht paarweise auf gleicher Hoehe):
-      // von unten nach oben abwechselnd aussen/innen.
-      { id: 'par1m:1', device: 'strahlerFront', anchor: 'outer', yPct: 62, offW: -0.14 },
-      { id: 'par1m:2', device: 'strahlerFront', anchor: 'inner', yPct: 50, offW: 0.5, off: 1.6 },
-      { id: 'par1m:3', device: 'strahlerFront', anchor: 'outer', yPct: 38, offW: -0.14 },
-      { id: 'par1m:4', device: 'strahlerFront', anchor: 'inner', yPct: 26, offW: 0.5, off: 1.6 },
-      // Fallback, wenn die Aussenplaetze durch Strobos belegt sind: nur die beiden Innenplaetze.
-      { id: 'par1mInner:1', device: 'strahlerFront', anchor: 'inner', yPct: 56, offW: 0.5, off: 1.6 },
-      { id: 'par1mInner:2', device: 'strahlerFront', anchor: 'inner', yPct: 30, offW: 0.5, off: 1.6 },
-    ]),
-    1.5: commonSlots(1.5).concat([
-      // Moving Wall Washer, Innenseite Richtung DJ-Pult (seitenweise leicht unterschiedlich
-      // nachjustiert, da die Traverse im Foto minimal schraeg steht).
-      // Frueher seitenweise unterschiedlich nachjustiert (links 2 / rechts 5) — das ergab einen
-      // sichtbaren Versatz von 3px zwischen linker und rechter Seite. Jetzt beidseitig gleich,
-      // damit die Anordnung exakt spiegelbildlich ist.
+    1.5: [
+      // Innenseite Richtung DJ-Pult. Frueher seitenweise unterschiedlich nachjustiert (links 2 /
+      // rechts 5) — ergab einen sichtbaren 3px-Versatz. Jetzt beidseitig gleich (spiegelbildlich).
       { id: 'wallwasher', device: 'wallwasher', anchor: 'inner', yPct: 50, offW: 0.5, off: 0.25, dxIn: 3.5 },
-    ]),
+    ],
   };
-
-  // Welche Plaetze der 1m-Traverse in welcher Reihenfolge mit Parstrahlern belegt werden.
-  const PAR_1M_ORDER = ['par1m:1', 'par1m:2', 'par1m:3', 'par1m:4'];
-  const PAR_1M_ORDER_INNER_ONLY = ['par1mInner:1', 'par1mInner:2'];
 
   // Vom Positions-Editor gesetzte Feinkorrekturen: { "1|par1m:3": { dxIn: 4, dy: -2 }, ... }
   // Leer = es gilt genau das, was oben im Katalog steht.
@@ -920,24 +879,6 @@
     return null;
   }
 
-  // ---- Fest uebernommene Feinjustierung aus dem Positions-Editor ----
-  // Diese Werte wurden im Editor per Finger eingestellt und hier dauerhaft eingetragen. Weil sie am
-  // Katalog-Platz haengen (und der relativ zur Traverse definiert ist), gelten sie automatisch in
-  // JEDER Kombination — auch wenn sich die Tuerme durch andere Geraetezahlen umbauen.
-  function tuneSlot(len, id, dxIn, dy){
-    const sl = findSlot(len, id);
-    if(!sl) return;
-    sl.dxIn = (sl.dxIn || 0) + dxIn;
-    sl.dy = (sl.dy || 0) + dy;
-  }
-  tuneSlot(0.5, 'foot',          -12, -10);
-  tuneSlot(0.5, 'parOpp',          0,   1);
-  tuneSlot(1.5, 'strobe:middle',   0,  -1);
-  tuneSlot(1.0, 'par1m:1',        33,   0);
-  tuneSlot(1.0, 'par1m:2',       -13,  33);
-  tuneSlot(1.0, 'par1m:3',         6,   4);
-  tuneSlot(1.0, 'par1m:4',        12,  -4);
-
   // Rechnet einen Katalog-Platz in die linke obere Ecke des Geraets um.
   // ctx enthaelt die konkrete Traversen-Geometrie dieses Turms, dev die Groesse des Geraets.
   function slotBox(len, id, ctx, dev){
@@ -961,6 +902,37 @@
     const inward = sl.anchor === 'inner' ? -toCenter : toCenter;
     const cx = edge + inward * off + toCenter * dxIn;
     return { x: cx - dev.w / 2, y: ctx.trussY + (yPct / 100) * ctx.trussH - dev.h / 2 + dy, slot: sl };
+  }
+
+  // ===================== MONTAGE-PLAN-VERTEILUNG =====================
+  // Strahler und Strobo werden nicht mehr aus festen Tabellen positioniert, sondern aus dem
+  // Montage-Plan (MOUNT_PLAN, siehe weiter unten). Zwei Regeln, die Adrian festgelegt hat:
+  //  1) Hoeherpriore Geraete (Strobo) verdraengen niedrigerpriore (Strahler) vom selben Punkt —
+  //     geprueft per echter Rechteck-Kollision mit den tatsaechlichen Geraete-Massen, nicht nur
+  //     Positionsname.
+  //  2) Sind nur Strahler ausgewaehlt, verteilen sie sich gleichmaessig ueber ALLE aktiven
+  //     Traversen (rundenweise 0,5 -> 1 -> 1,5 -> ...), statt eine Traverse komplett zu fuellen,
+  //     bevor die naechste drankommt.
+  function rectsOverlap(a, b){
+    const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    return ix > 0 && iy > 0;
+  }
+  // Tiefen-Geometrie einer Traversenlaenge bei gegebenem Rang (0=aussen/gross .. 2=innen/klein).
+  function poleGeometry(len, rank){
+    const slot = RANK_SLOT[rank];
+    const { scale: k, lift } = DEPTH[slot];
+    const localFloorY = FLOOR_Y - lift;
+    const trussH = TRUSS_SIZE[len].h * k;
+    return { k, trussH, trussY: localFloorY - trussH };
+  }
+  // Rechnet einen Montage-Plan-Punkt (aufgenommen an EINER freistehenden Traverse in echter Groesse,
+  // "Richtung Buehnenmitte" = positives xRel) auf die Bildposition an einem konkreten Turm um.
+  function mountPointBox(side, pt, k, slotX, trussY, trussH, sz){
+    const toCenter = side === 'left' ? 1 : -1;
+    const cx = slotX + toCenter * pt.xRel * k;
+    const cy = trussY + (pt.yPct / 100) * trussH;
+    return { x: cx - sz.w / 2, y: cy - sz.h / 2, w: sz.w, h: sz.h };
   }
 
   // ===================== SVG-Bühne: alles über feste Koordinaten, kein CSS-Positionsraten mehr =====================
@@ -1073,7 +1045,10 @@
 
   const RANK_SLOT = ['outer', 'middle', 'inner']; // Rang 0/1/2 → Tiefen-Konfiguration
 
-  function svgPole(len, side, slotX, rank, filledPositions, hasStrahler, hasWallwasher, hasMovingHead, hasStrahlerOpp, strahlerInnerCount, outerFree){
+  // strobePts/footPt/frontPts kommen bereits fertig aufgeloest von der Verteilung in renderStage()
+  // (siehe "MONTAGE-PLAN-VERTEILUNG" weiter oben) — svgPole zeichnet hier nur noch, ohne selbst zu
+  // entscheiden, WAS wohin kommt.
+  function svgPole(len, side, slotX, rank, strobePts, hasWallwasher, hasMovingHead, footPt, frontPts){
     const poleKey = `${side}-${len}`;
     const slot = RANK_SLOT[rank];
     const { scale: k, lift } = DEPTH[slot];
@@ -1085,17 +1060,12 @@
     const trussY = localFloorY - truss.h;
     let out = '';
 
-    // Geometrie dieses Turms — Grundlage fuer alle Katalog-Plaetze (siehe SLOT_CATALOG oben).
-    const slotCtx = { side, slotX, trussX, trussY, trussW: truss.w, trussH: truss.h, localFloorY, k };
-
-    // Parstrahler ZUERST zeichnen (= hintere Ebene), damit die Traverse optisch darüber liegt und der
-    // Strahler wie in echt "in" der Traverse steht, statt frei davor zu schweben. Höhe = Höhe der Traverse
-    // (wie in der Vorlage — deutlich sichtbar, nicht mehr winzig), strahlt nach oben → Schrägansicht-Foto.
-    if(hasStrahler){
-      const stW = truss.w * 0.78; // etwas schmäler als vorher (0.9 → 0.78)
-      const p = { w: stW, h: stW / RATIO.strahlerAngled };
-      const b = slotBox(len, 'foot', slotCtx, p);
-      out += svgImg(markSlot(`strahler:${poleKey}`, len, 'foot', side), photos.strahlerAngled, 'Parstrahler', b.x, b.y, p.w, p.h, 0, null, true); // staerkeres Aufblinken: sitzt halb hinter der Traverse und geht sonst leicht unter
+    // Fuss-Strahler ZUERST zeichnen (= hintere Ebene), damit die Traverse optisch darüber liegt und
+    // der Strahler wie in echt "in" der Traverse steht. Strahlt nach oben → Schrägansicht-Foto.
+    if(footPt){
+      const p = { w: SIZE.lichtAAngled.w * k, h: SIZE.lichtAAngled.h * k };
+      const b = mountPointBox(side, footPt, k, slotX, trussY, truss.h, p);
+      out += svgImg(`strahler:${poleKey}`, photos.strahlerAngled, 'Parstrahler', b.x, b.y, b.w, b.h, 0, null, true); // staerkeres Aufblinken: sitzt halb hinter der Traverse und geht sonst leicht unter
     }
 
     // Traverse (überlappt jetzt den unteren Teil des Strahlers)
@@ -1110,68 +1080,29 @@
       out += svgImg(`head:${poleKey}`, photos.movingHead, 'Moving Head', slotX - mh.w / 2, trussY - mh.h + 6 * mhK, mh.w, mh.h, 0, null, false, side === 'right');  // weniger tief in der Traverse (14 -> 6); rechte Seite gespiegelt, damit der Kopf zur Buehnenmitte zeigt
     }
 
-    // Strobes: immer auf der AUSSENSEITE der Traverse (Richtung Boxen, weg von der Bühnenmitte) —
-    // spiegelbildlich je Seite, komplett innerhalb der eigenen Traversenbreite.
-    filledPositions.forEach(pos => {
+    // Strobos: Positionen aus dem Montage-Plan (bereits von unten nach oben ausgewaehlt).
+    (strobePts || []).forEach((pt, i) => {
       const s = { w: SIZE.strobeSmall.w * k, h: SIZE.strobeSmall.h * k };
-      const b = slotBox(len, 'strobe:' + pos, slotCtx, s);
-      out += svgImg(markSlot(`strobe:${poleKey}:${pos}`, len, 'strobe:' + pos, side), photos.strobe, 'Strobe', b.x, b.y, s.w, s.h);
+      const b = mountPointBox(side, pt, k, slotX, trussY, truss.h, s);
+      out += svgImg(`strobe:${poleKey}:${i}`, photos.strobe, 'Strobe', b.x, b.y, b.w, b.h);
     });
 
-    // Zusaetzlicher Parstrahler auf 0,5m-Pfosten: gleiche Hoehe wie der (einzelne) Strobo, aber auf
-    // der gegenueberliegenden (Innen-)Seite der Traverse — nach vorne strahlendes Foto, da er seitlich
-    // an der Traverse haengt statt "in" ihr zu stehen.
-    if(hasStrahlerOpp){
-      // Echtes Mass (22cm Durchmesser) statt an der Strobo-Groesse haengend — dadurch ca. 1,7x groesser.
+    // Haengende Strahler: Positionen aus dem Montage-Plan, bereits gleichmaessig ueber die aktiven
+    // Traversen verteilt und um mit Strobos kollidierende Punkte bereinigt (siehe renderStage()).
+    (frontPts || []).forEach((pt, i) => {
       const pf = { w: SIZE.lichtAFront.w * k, h: SIZE.lichtAFront.h * k };
-      const b = slotBox(len, 'parOpp', slotCtx, pf);
-      if(b) out += svgImg(markSlot(`strahlerOpp:${poleKey}`, len, 'parOpp', side), photos.strahlerFront, 'Parstrahler', b.x, b.y, pf.w, pf.h, 0, null, true);
-    }
-
-    // 1m-Traverse: bis zu 4 weitere Strahler. Laut Nutzer-Markierung NICHT paarweise auf gleicher
-    // Hoehe (das wirkt wie eine starre Leiter), sondern treppenfoermig versetzt: unterster aussen,
-    // der naechste innen etwas hoeher, dann wieder aussen hoeher, usw. Jeder Platz hat deshalb eine
-    // eigene Hoehe statt zwei geteilter Ebenen.
-    // Die beiden Aussenplaetze entfallen, wenn dort bereits Strobos haengen (outerFree === false);
-    // dann bleiben die 2 Innenplaetze (die behalten ihre Treppen-Hoehen).
-    if(strahlerInnerCount > 0){
-      const pf2 = { w: SIZE.lichtAFront.w * k, h: SIZE.lichtAFront.h * k };
-      const order = outerFree ? PAR_1M_ORDER : PAR_1M_ORDER_INNER_ONLY;
-      order.slice(0, strahlerInnerCount).forEach(slotId => {
-        const b = slotBox(len, slotId, slotCtx, pf2);
-        if(b) out += svgImg(markSlot(`strahler1m:${poleKey}:${slotId}`, len, slotId, side), photos.strahlerFront, 'Parstrahler', b.x, b.y, pf2.w, pf2.h, 0, null, true);
-      });
-    }
+      const b = mountPointBox(side, pt, k, slotX, trussY, truss.h, pf);
+      out += svgImg(`strahlerFront:${poleKey}:${i}`, photos.strahlerFront, 'Parstrahler', b.x, b.y, b.w, b.h, 0, null, true);
+    });
 
     // Moving Wall Washer (nur 1+2, auf der 1,5m-Traverse): immer auf der INNENSEITE, Richtung
     // DJ-Pult/Bühnenmitte — spiegelbildlich je Seite, komplett innerhalb der eigenen Traversenbreite.
     // MWW 3+4 landen jetzt immer auf dem Boden (siehe renderStage), nie auf der Traverse.
     if(hasWallwasher){
       const w = { w: SIZE.wallwasher.w * k, h: SIZE.wallwasher.h * k };
+      const slotCtx = { side, slotX, trussX, trussY, trussW: truss.w, trussH: truss.h, localFloorY, k };
       const b = slotBox(len, 'wallwasher', slotCtx, w);
       if(b) out += svgImg(markSlot(`wallwasher:${poleKey}`, len, 'wallwasher', side), photos.wallwasher, 'Moving Wall Washer', b.x, b.y, w.w, w.h);
-    }
-
-    // ---- Im Editor: ALLE Montagepunkte dieser Traverse sichtbar machen, auch die gerade freien ----
-    // So sieht man auf einen Blick, wo ueberhaupt etwas haengen kann, und kann jeden Punkt anfassen.
-    if(slotEditorOn){
-      const shownIds = {};
-      Object.keys(SLOT_META).forEach(rk => {
-        const m = SLOT_META[rk];
-        if(m.len === len && m.side === side) shownIds[m.slotId] = true;
-      });
-      const marker = { w: 9, h: 9 };
-      allSlots(len).forEach(sl => {
-        if(shownIds[sl.id]) return;                       // dort haengt schon ein Geraet
-        const b = slotBox(len, sl.id, slotCtx, marker);
-        if(!b) return;
-        const rk = `slotmark:${poleKey}:${sl.id}`;
-        markSlot(rk, len, sl.id, side);
-        currentRegistry[rk] = { src: null, alt: sl.id, x: b.x, y: b.y, w: marker.w, h: marker.h };
-        const isCustom = (CUSTOM_SLOTS[len] || []).some(s => s.id === sl.id);
-        const col = isCustom ? '#5ad2a0' : '#ff8a3d';
-        out += `<g data-regkey="${rk}" class="lk-slot-marker"><circle cx="${b.x + marker.w / 2}" cy="${b.y + marker.h / 2}" r="${marker.w / 2}" fill="${col}" fill-opacity=".55" stroke="${col}" stroke-width="1"><title>${sl.id}</title></circle></g>`;
-      });
     }
     return out;
   }
@@ -1478,13 +1409,10 @@
   // ============================================================================
   let slotEditorOn = false;
   let slotEditorDragging = false;
-  // Gruppen von Plaetzen, die untereinander gleichmaessig verteilt sein sollen. "Abstaende angleichen"
-  // arbeitet immer auf einer solchen Gruppe: oberster und unterster Platz bleiben, wo sie sind, alle
-  // dazwischen werden auf exakt gleiche Abstaende gesetzt.
-  const SLOT_GROUPS = {
-    '1|par1m': { len: 1.0, ids: PAR_1M_ORDER },
-    '1|par1mInner': { len: 1.0, ids: PAR_1M_ORDER_INNER_ONLY },
-  };
+  // Gruppen von Plaetzen, die untereinander gleichmaessig verteilt sein sollen ("Höhen angleichen" /
+  // "Seitlich ausrichten" im alten Positions-Editor). Strahler/Strobo/Wallwasher kommen inzwischen
+  // aus dem Montage-Plan statt aus dem Katalog — leer, weil es hier nichts mehr zu gruppieren gibt.
+  const SLOT_GROUPS = {};
 
   // Rechnet die tatsaechliche Hoehe eines Platzes (Katalog + Korrektur) in Prozent der Traversenhoehe.
   function effectiveYPct(len, id){
@@ -2259,50 +2187,122 @@
         remainingStrobes -= positions.length;
       });
 
-      // Parstrahler: 1 pro tatsächlich vorhandenem Pfosten (nie eigens erzeugt)
-      // 1 Parstrahler pro Pfosten (angewinkelt, "in" der Traverse). Auf 0,5m-Pfosten passt zusätzlich
-      // noch einer auf der Höhe des Strobos, aber auf der gegenüberliegenden Seite — der wird separat
-      // in einem zweiten Durchgang vergeben (erst wenn alle Pfosten schon einen haben).
-      const poleHasStrahler = {};
-      activePoles.forEach(p => {
-        if(remainingA <= 0) return;
-        poleHasStrahler[`${p.side}-${p.len}`] = true;
-        remainingA--;
-      });
-      // Zusaetzlicher Parstrahler auf 0,5m-Pfosten, gegenueber vom Strobo. Gilt jetzt unabhaengig
-      // davon, ob ein DJ-Pult steht — durch den gleichmaessigen RANK_SHIFT ist auch in der
-      // zusammengerueckten Reihe genug Abstand zum Nachbarpfosten.
-      const poleHasStrahlerOpp = {};
-      activePoles.filter(p => p.len === 0.5).forEach(p => {
-        if(remainingA <= 0) return;
-        poleHasStrahlerOpp[`${p.side}-${p.len}`] = true;
-        remainingA--;
-      });
-      // 1m-Pfosten: 4 weitere Parstrahler — zwei Hoehen, je einer innen und einer aussen.
-      // Die beiden Aussenplaetze entfallen, wenn dort bereits Strobos haengen; dann bleiben
-      // die 2 Innenplaetze.
-      const pole1mOuterFree = {};
-      activePoles.filter(p => p.len === 1.0).forEach(p => {
-        const k2 = `${p.side}-${p.len}`;
-        pole1mOuterFree[k2] = !((poleStrobes[k2] || []).length);
-      });
-      const poleStrahlerInnerCount = {};
-      for(let slot = 0; slot < 4; slot++){
-        activePoles.filter(p => p.len === 1.0).forEach(p => {
-          if(remainingA <= 0) return;
-          const k2 = `${p.side}-${p.len}`;
-          const cap = pole1mOuterFree[k2] ? 4 : 2;
-          if((poleStrahlerInnerCount[k2] || 0) >= cap) return;
-          poleStrahlerInnerCount[k2] = (poleStrahlerInnerCount[k2] || 0) + 1;
-          remainingA--;
-        });
+      // ---- Rang je Traversenlaenge (fuer die Tiefen-Skalierung) — activePoles ist immer
+      // seitensymmetrisch (Kopf-/Strobo-/Wallwasher-Anzahlen sind es auch), eine Seite reicht daher
+      // als Referenz fuer beide.
+      const rankByLen = {};
+      activePoles.filter(p => p.side === 'left').sort((x, y) => x.len - y.len)
+        .forEach((p, i) => { rankByLen[p.len] = 2 - i; });
+      const activeLens = [...new Set(activePoles.map(p => p.len))].sort((a, b) => a - b);
+
+      // X-Position je Rang — VORGEZOGEN (stand bisher erst nach der Geraete-Vergabe): die
+      // Kollisionspruefung unten arbeitet jetzt mit echten Weltkoordinaten statt nur innerhalb
+      // derselben Traversenlaenge zu vergleichen. Die Tuerme stehen eng nebeneinander (41-48px) —
+      // ein Punkt an der Aussen-/Innenkante kann durchaus in den Nachbarturm hineinragen.
+      const DJ_OUTWARD_SHIFT = dj > 0 ? 18 : 0;
+      const rankShiftByIdx = [RANK_SHIFT - DJ_OUTWARD_SHIFT, RANK_SHIFT - DJ_OUTWARD_SHIFT, RANK_SHIFT - DJ_OUTWARD_SHIFT];
+      const rankX = {
+        left:  POSITION_X.left.map((x, idx) => x + rankShiftByIdx[idx]),
+        right: POSITION_X.right.map((x, idx) => x - rankShiftByIdx[idx]),
+      };
+
+      // Belegte Rechtecke in ECHTEN Weltkoordinaten, je Seite — waechst waehrend der Vergabe in
+      // Prioritaetsreihenfolge (Wall Washer -> Strobo -> Strahler). Ein Punkt wird nur uebernommen,
+      // wenn er mit KEINEM bereits belegten Rechteck kollidiert — das faengt sowohl Ueberschneidungen
+      // auf demselben Turm (z.B. Fuss- und Haenge-Strahler) als auch mit dem Nachbarturm ab.
+      const placed = { left: [], right: [] };
+      function placeIfFree(side, len, pt, sz){
+        const geo = poleGeometry(len, rankByLen[len]);
+        const box = mountPointBox(side, pt, geo.k, rankX[side][rankByLen[len]], geo.trussY, geo.trussH, sz);
+        if(placed[side].some(b => rectsOverlap(box, b))) return false;
+        placed[side].push(box);
+        return true;
       }
 
-      // Moving Wall Washer: nur 1+2 kommen auf die 1,5m-Traverse (Innenseite, Richtung DJ-Pult),
-      // 3+4 landen immer auf dem Boden vor dem Pult (siehe unten bei den Boden-MWW).
+      // 1) Moving Wall Washer zuerst (hoechste Prioritaet, nur 1,5m-Traverse, Innenseite Richtung
+      // DJ-Pult) — Positionsformel unveraendert, wird hier nur zusaetzlich als belegte Flaeche
+      // eingetragen, damit Strobo/Strahler nicht hineinragen.
       const poleHasWallwasher = {};
       if(remainingD > 0){ poleHasWallwasher['left-1.5'] = true; remainingD--; }
       if(remainingD > 0){ poleHasWallwasher['right-1.5'] = true; remainingD--; }
+      ['left', 'right'].forEach(side => {
+        if(!poleHasWallwasher[side + '-1.5'] || rankByLen[1.5] === undefined) return;
+        const geo = poleGeometry(1.5, rankByLen[1.5]);
+        const w = { w: SIZE.wallwasher.w * geo.k, h: SIZE.wallwasher.h * geo.k };
+        const slotX = rankX[side][rankByLen[1.5]];
+        const trussW = TRUSS_SIZE[1.5].w * geo.k;
+        // slotBox() liefert nur {x,y} (kein w/h — der Aufrufer kennt dev.w/dev.h ja schon), daher
+        // hier explizit zum vollstaendigen Kollisions-Rechteck ergaenzen.
+        const b = slotBox(1.5, 'wallwasher', { side, slotX, trussX: slotX - trussW / 2, trussY: geo.trussY, trussW, trussH: geo.trussH, localFloorY: 0, k: geo.k }, w);
+        if(b) placed[side].push({ x: b.x, y: b.y, w: w.w, h: w.h });
+      });
+
+      // 2) Strobo: die Stufen-Tabelle entscheidet weiterhin, WELCHE Traversen ueberhaupt Strobos
+      // tragen und wie viele (unveraendert) — nur die genaue Position kommt jetzt aus dem
+      // Montage-Plan (von unten nach oben) und wird gegen bereits belegte Flaechen geprueft.
+      const strobeCountByLen = {};
+      Object.keys(poleStrobes).forEach(key => {
+        const len = parseFloat(key.split('-')[1]);
+        strobeCountByLen[len] = Math.max(strobeCountByLen[len] || 0, poleStrobes[key].length);
+      });
+      const strobePtsByLen = {};
+      activeLens.forEach(len => {
+        strobePtsByLen[len] = [];
+        const need = strobeCountByLen[len] || 0;
+        if(!need) return;
+        const all = (MOUNT_PLAN[String(len)] || {}).strobe || [];
+        const geo = poleGeometry(len, rankByLen[len]);
+        const sz = { w: SIZE.strobeSmall.w * geo.k, h: SIZE.strobeSmall.h * geo.k };
+        for(let i = 0; i < all.length && strobePtsByLen[len].length < need; i++){
+          const okL = placeIfFree('left', len, all[i], sz);
+          const okR = placeIfFree('right', len, all[i], sz);
+          if(okL && okR) strobePtsByLen[len].push(all[i]);
+          else { if(okL) placed.left.pop(); if(okR) placed.right.pop(); } // nur symmetrisch uebernehmen
+        }
+      });
+
+      // 3) Parstrahler: Fuss-Position zuerst (1 pro Turm), danach haengende Positionen RUNDENWEISE
+      // ueber ALLE aktiven Traversenlaengen verteilt (0,5 -> 1 -> 1,5 -> 0,5 -> ...) — dadurch teilt
+      // sich die Anordnung ueber die ganze Konstruktion auf, statt eine Laenge komplett zu fuellen.
+      // Kollidiert ein Punkt mit einer bereits belegten Flaeche (Wallwasher/Strobo/eigener Fuss/
+      // Nachbarturm), wird er uebersprungen.
+      const footPtByPole = {};
+      activePoles.forEach(p => {
+        if(remainingA <= 0 || rankByLen[p.len] === undefined) return;
+        const foot = ((MOUNT_PLAN[String(p.len)] || {}).strahlerAngled || [])[0];
+        if(!foot) return;
+        const geo = poleGeometry(p.len, rankByLen[p.len]);
+        const sz = { w: SIZE.lichtAAngled.w * geo.k, h: SIZE.lichtAAngled.h * geo.k };
+        if(!placeIfFree(p.side, p.len, foot, sz)) return;
+        footPtByPole[`${p.side}-${p.len}`] = foot;
+        remainingA--;
+      });
+      const frontPtsByLen = {};
+      activeLens.forEach(len => { frontPtsByLen[len] = []; });
+      // WICHTIG: eine Runde, in der (fuer alle Laengen) genau der unterste Punkt am eigenen
+      // Fuss-Strahler abprallt, darf die Schleife NICHT beenden — hoehere Runden (weiter oben auf
+      // der Traverse) haben damit noch nichts zu tun und koennen trotzdem noch passen. Deshalb wird
+      // weitergezaehlt, solange irgendeine Laenge ueberhaupt noch unbesuchte Punkte hat.
+      const maxFrontLen = Math.max(0, ...activeLens.map(len => ((MOUNT_PLAN[String(len)] || {}).strahlerFront || []).length));
+      for(let round = 0; round < maxFrontLen && remainingA >= 2; round++){
+        for(const len of activeLens){
+          if(remainingA < 2) continue;
+          const all = (MOUNT_PLAN[String(len)] || {}).strahlerFront || [];
+          if(round >= all.length) continue;
+          const pt = all[round];
+          const geo = poleGeometry(len, rankByLen[len]);
+          const sz = { w: SIZE.lichtAFront.w * geo.k, h: SIZE.lichtAFront.h * geo.k };
+          const okL = placeIfFree('left', len, pt, sz);
+          const okR = placeIfFree('right', len, pt, sz);
+          if(okL && okR){
+            frontPtsByLen[len].push(pt);
+            remainingA -= 2;
+          } else {
+            if(okL) placed.left.pop();
+            if(okR) placed.right.pop();
+          }
+        }
+      }
 
       // Echte Moving Heads werden nach Rang vergeben — nur Pfosten, die auch in headKeys stehen.
       // X-Position: pro Seite so, dass die innerste Position (Richtung Pult) der feste Anker ist —
@@ -2319,19 +2319,15 @@
       // darauf. Dadurch waechst nur die Luecke zwischen DJ-Pult und 0,5m-Turm; die Abstaende der
       // Tuerme untereinander bleiben unveraendert. Ohne diesen Zusatzabstand haengt der (Richtung
       // Buehnenmitte versetzte) Parstrahler der 0,5m-Traverse im DJ-Pult-Bild.
-      const DJ_OUTWARD_SHIFT = dj > 0 ? 18 : 0;
-      const rankShiftByIdx = [RANK_SHIFT - DJ_OUTWARD_SHIFT, RANK_SHIFT - DJ_OUTWARD_SHIFT, RANK_SHIFT - DJ_OUTWARD_SHIFT];
-      const rankX = {
-        left:  POSITION_X.left.map((x, idx) => x + rankShiftByIdx[idx]),
-        right: POSITION_X.right.map((x, idx) => x - rankShiftByIdx[idx]),
-      };
+      // (rankX/DJ_OUTWARD_SHIFT wurden weiter oben schon berechnet — die Kollisionspruefung braucht
+      // sie bereits vor dieser Stelle.)
       ['left', 'right'].forEach(sideName => {
         const sidePoles = activePoles.filter(p => p.side === sideName).sort((x, y) => x.len - y.len);
-        sidePoles.forEach((spec, i) => {
+        sidePoles.forEach(spec => {
           const key = `${spec.side}-${spec.len}`;
-          const rank = 2 - i;
+          const rank = rankByLen[spec.len];
           const slotX = rankX[sideName][rank];
-          svg += svgPole(spec.len, spec.side, slotX, rank, poleStrobes[key] || [], !!poleHasStrahler[key], !!poleHasWallwasher[key], headKeys.has(key), !!poleHasStrahlerOpp[key], poleStrahlerInnerCount[key] || 0, !!pole1mOuterFree[key]);
+          svg += svgPole(spec.len, spec.side, slotX, rank, strobePtsByLen[spec.len] || [], !!poleHasWallwasher[key], headKeys.has(key), footPtByPole[key] || null, frontPtsByLen[spec.len] || []);
         });
       });
     } else if(b >= 7){
