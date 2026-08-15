@@ -357,12 +357,11 @@
       <button type="button" class="stage-tool-btn stage-tool-btn--danger" id="resetAllBtn" onclick="resetAllSelections()">Alles zurücksetzen</button>
     </div>
     <div class="slot-edit-panel" id="planPanel" style="display:none">
-      <p class="slot-edit-hint">Hier wird einmalig festgelegt, wo welches Gerät überhaupt hängen kann. Gerät auswählen, dann auf eine Traverse tippen — es erscheint in echter Größe, so siehst Du direkt, ob es dort passt. Setz ruhig <b>alle</b> möglichen Stellen, nicht nur die, die Du üblich baust. Gesetztes lässt sich verschieben; „Löschen“ an, dann antippen zum Entfernen. Die Bühnenmitte liegt rechts — die linke Seite ergibt sich automatisch spiegelbildlich.</p>
+      <p class="slot-edit-hint">Hier wird einmalig festgelegt, wo welches Gerät überhaupt hängen kann. <b>Strahler (hängend) und Strobo sind Bereiche:</b> ersten Punkt tippen (Start), zweiten Punkt tippen (Ende, gleiche Stelle wie Start, nur höher/tiefer) — dazwischen wird die tatsächliche Stückzahl später automatisch gleichmäßig verteilt und passt sich an, wenn sich die Anzahl ändert. <b>Fuß-Strahler und Wall Washer</b> bleiben Einzelpunkte: einmal tippen genügt. Gesetztes lässt sich verschieben; „Löschen“ an, dann antippen zum Entfernen. Die Bühnenmitte liegt rechts — die linke Seite ergibt sich automatisch spiegelbildlich.</p>
       <div class="stage-tools" id="planDeviceBtns"></div>
       <pre class="slot-edit-out" id="planOut"></pre>
       <div class="stage-tools">
         <button type="button" class="stage-tool-btn" id="planDeleteBtn" onclick="togglePlanDelete()">Löschen</button>
-        <button type="button" class="stage-tool-btn" onclick="regularizePlan()">Vermitteln</button>
         <button type="button" class="stage-tool-btn" onclick="copyPlan()">Zum Kopieren</button>
         <button type="button" class="stage-tool-btn" onclick="importPlan()">Einfügen</button>
         <button type="button" class="stage-tool-btn" onclick="restorePlanDefault()">Fest hinterlegten Plan laden</button>
@@ -1543,34 +1542,67 @@
   let planMode = false;
   let planDevice = 'strahlerFront';     // welches Geraet gerade gesetzt wird
   let planDeleteMode = false;
-  // ---- Fest hinterlegter Montageplan ----
-  // Von Adrian im Montage-Plan gesetzt (alle Stellen, an denen das jeweilige Geraet in echt haengen
-  // kann) und anschliessend "vermittelt" (gleiche Abstaende, saubere Spalten).
-  // Positionen gelten je Turm; die Gegenseite entsteht automatisch spiegelbildlich.
+  // ---- Fest hinterlegter Montageplan: ZONEN statt Einzelpunkte ----
+  // Jede Zone ist eine SENKRECHTE Linie auf der Traverse (fester x-Abstand von der Mitte, y von-bis
+  // in % der Traversenhoehe) — "hier kann das Geraet von diesem bis zu jenem Punkt haengen". Wie
+  // VIELE Geraete tatsaechlich in eine Zone kommen, wird bei JEDEM Render neu berechnet und
+  // gleichmaessig ueber die Zonenlaenge verteilt (siehe zonePoints() weiter unten) — die Anordnung
+  // verschiebt sich also automatisch mit, wenn sich die Stueckzahl aendert, statt an festen Punkten
+  // zu kleben. "foot" (der stehende, angewinkelte Strahler im Traversenfuss) bleibt ein Einzelpunkt,
+  // davon gibt es immer nur genau einen pro Turm.
+  // Aus Adrians vorherigem Punkte-Montageplan automatisch abgeleitet (nach x-Seite gruppiert, min/max
+  // als Zonengrenzen) — deckt sich daher mit allem, was er dort schon eingezeichnet hatte.
   const MOUNT_PLAN_DEFAULT = {
     "0.5": {
       strahlerAngled: [{ xRel: 0.1, yPct: 77.8 }],
-      strahlerFront:  [{ xRel: -11.6, yPct: 56.4 }, { xRel: 12.7, yPct: 56.4 }],
-      strobe:         [{ xRel: -11.6, yPct: 56.4 }, { xRel: 13.5, yPct: 56.4 }],
+      strahlerFront:  [{ xRel: -11.6, yStart: 56.4, yEnd: 56.4 }, { xRel: 12.7, yStart: 56.4, yEnd: 56.4 }],
+      strobe:         [{ xRel: -11.6, yStart: 56.4, yEnd: 56.4 }, { xRel: 13.5, yStart: 56.4, yEnd: 56.4 }],
     },
     "1": {
       strahlerAngled: [{ xRel: 0.6, yPct: 88.8 }],
-      strahlerFront:  [{ xRel: -11.6, yPct: 82.8 }, { xRel: 13.1, yPct: 62.7 },
-                       { xRel: -11.6, yPct: 42.5 }, { xRel: 13.1, yPct: 22.4 }],
-      strobe:         [{ xRel: -11.6, yPct: 72.4 }, { xRel: 12.8, yPct: 72.4 },
-                       { xRel: -11.6, yPct: 31.0 }, { xRel: 12.8, yPct: 31.0 }],
+      strahlerFront:  [{ xRel: -11.6, yStart: 82.8, yEnd: 42.5 }, { xRel: 13.1, yStart: 62.7, yEnd: 22.4 }],
+      strobe:         [{ xRel: -11.6, yStart: 72.4, yEnd: 31.0 }, { xRel: 12.8, yStart: 72.4, yEnd: 31.0 }],
     },
     "1.5": {
       strahlerAngled: [{ xRel: -0.7, yPct: 92.6 }],
-      strahlerFront:  [{ xRel: -13.7, yPct: 87.1 }, { xRel: 13.9, yPct: 72.4 },
-                       { xRel: -13.7, yPct: 57.7 }, { xRel: 13.9, yPct: 43.1 },
-                       { xRel: -13.7, yPct: 28.4 }, { xRel: 13.9, yPct: 13.7 }],
-      strobe:         [{ xRel: -13.0, yPct: 82.6 }, { xRel: 12.6, yPct: 82.6 },
-                       { xRel: -13.0, yPct: 53.1 }, { xRel: 12.6, yPct: 53.1 },
-                       { xRel: -13.0, yPct: 23.6 }, { xRel: 12.6, yPct: 23.6 }],
+      strahlerFront:  [{ xRel: -13.7, yStart: 87.1, yEnd: 28.4 }, { xRel: 13.9, yStart: 72.4, yEnd: 13.7 }],
+      strobe:         [{ xRel: -13.0, yStart: 82.6, yEnd: 23.6 }, { xRel: 12.6, yStart: 82.6, yEnd: 23.6 }],
       wallwasher:     [{ xRel: -13.2, yPct: 51.1 }, { xRel: 12.6, yPct: 51.1 }],
     },
   };
+
+  // Wie viele Geraete passen hoechstens ohne Ueberlappen in eine Zone (bei gegebener Tiefenskala)?
+  function zoneCapacity(zone, trussHpx, devHpx){
+    const spanPx = Math.abs((zone.yEnd - zone.yStart) / 100) * trussHpx;
+    return Math.max(1, Math.floor(spanPx / (devHpx * 0.82)) + 1);
+  }
+
+  // Verteilt `count` Geraete gleichmaessig ueber die Zonen eines Geraetetyps an einer Traversenlaenge
+  // — rundenweise auf die Zonen, damit bei ungerader Anzahl keine Zone leer bleibt. Wird komplett neu
+  // berechnet, sobald sich `count` aendert (dynamisch, keine feste Punkteliste). Reicht die
+  // Gesamtkapazitaet nicht aus, werden weniger als `count` Punkte zurueckgegeben.
+  function zonePoints(len, device, count, trussHpx, devHpx){
+    const zones = ((MOUNT_PLAN[String(len)] || {})[device]) || [];
+    if(!zones.length || count <= 0) return [];
+    const caps = zones.map(z => zoneCapacity(z, trussHpx, devHpx));
+    const per = zones.map(() => 0);
+    let remaining = count, progress = true;
+    while(remaining > 0 && progress){
+      progress = false;
+      for(let i = 0; i < zones.length && remaining > 0; i++){
+        if(per[i] < caps[i]){ per[i]++; remaining--; progress = true; }
+      }
+    }
+    const pts = [];
+    zones.forEach((z, i) => {
+      const k = per[i];
+      for(let j = 0; j < k; j++){
+        const t = k <= 1 ? 0.5 : j / (k - 1);
+        pts.push({ xRel: z.xRel, yPct: z.yStart + t * (z.yEnd - z.yStart) });
+      }
+    });
+    return pts;
+  }
   let MOUNT_PLAN = JSON.parse(JSON.stringify(MOUNT_PLAN_DEFAULT));
   try {
     const savedP = localStorage.getItem('lkMountPlan');
@@ -1604,6 +1636,7 @@
 
   function togglePlanMode(){
     planMode = !planMode;
+    pendingZoneStart = null;
     if(planMode && slotEditorOn) toggleSlotEditor();
     const btn = document.getElementById('planModeBtn');
     if(btn){
@@ -1617,8 +1650,13 @@
     updatePlanPanel();
   }
 
-  function setPlanDevice(dev){ planDevice = dev; planDeleteMode = false; updatePlanPanel(); }
-  function togglePlanDelete(){ planDeleteMode = !planDeleteMode; updatePlanPanel(); }
+  function setPlanDevice(dev){ planDevice = dev; planDeleteMode = false; pendingZoneStart = null; updatePlanPanel(); renderMountPlan(); }
+  function togglePlanDelete(){ planDeleteMode = !planDeleteMode; pendingZoneStart = null; updatePlanPanel(); renderMountPlan(); }
+
+  // Strahler (haengend) und Strobo sind ZONEN (Bereich, in dem beliebig viele gleichmaessig verteilt
+  // werden) — Fuss-Strahler und Wall Washer bleiben Einzelpunkte (davon gibt es immer nur maximal 1-2).
+  const ZONE_DEVICES = { strahlerFront: true, strobe: true };
+  let pendingZoneStart = null; // { len, xRel, yPct } -- erster Tipp einer Zone, wartet auf den zweiten
 
   function renderMountPlan(){
     currentRegistry = {}; phase1Parts = []; SLOT_META = {};
@@ -1632,14 +1670,36 @@
         const spec = PLAN_DEVICES[dev];
         if(!spec) return;
         const sz = spec.size();
+        const dim = (dev === planDevice) ? '1' : '.55';
         (perLen[dev] || []).forEach((pos, idx) => {
-          const cx = r.cx + pos.xRel, cy = r.y + (pos.yPct / 100) * r.h;
           const rk = `plan:${len}:${dev}:${idx}`;
-          currentRegistry[rk] = { src: spec.img(), alt: dev, x: cx - sz.w / 2, y: cy - sz.h / 2, w: sz.w, h: sz.h };
-          const dim = (dev === planDevice) ? '1' : '.55';
-          svg += `<g data-regkey="${rk}" opacity="${dim}"><image href="${spec.img()}" xlink:href="${spec.img()}" x="${cx - sz.w / 2}" y="${cy - sz.h / 2}" width="${sz.w}" height="${sz.h}"><title>${spec.label}</title></image></g>`;
+          if(ZONE_DEVICES[dev]){
+            // Zone: senkrechte Linie von yStart bis yEnd, plus 3 Vorschau-Geraete gleichmaessig
+            // verteilt (nur zur Anschauung — wie viele es im echten Betrieb werden, haengt von der
+            // gewaehlten Stueckzahl ab und wird dort live berechnet).
+            const cx = r.cx + pos.xRel;
+            const y1 = r.y + (pos.yStart / 100) * r.h, y2 = r.y + (pos.yEnd / 100) * r.h;
+            currentRegistry[rk] = { src: null, alt: dev, x: cx - sz.w / 2, y: Math.min(y1, y2), w: sz.w, h: Math.max(Math.abs(y2 - y1), sz.h) };
+            svg += `<g data-regkey="${rk}" opacity="${dim}">`
+                 + `<line x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" stroke="#ff8a3d" stroke-width="3" stroke-linecap="round"/>`
+                 + `<circle cx="${cx}" cy="${y1}" r="5" fill="#ff8a3d"/><circle cx="${cx}" cy="${y2}" r="5" fill="#ff8a3d"/>`;
+            zonePoints(len, dev, 3, r.h, sz.h).forEach(pt => {
+              const px = r.cx + pt.xRel, py = r.y + (pt.yPct / 100) * r.h;
+              svg += `<image href="${spec.img()}" xlink:href="${spec.img()}" x="${px - sz.w / 2}" y="${py - sz.h / 2}" width="${sz.w}" height="${sz.h}" opacity=".85"/>`;
+            });
+            svg += `<title>${spec.label} — Zone (2x tippen zum Anlegen, ziehen zum Verschieben)</title></g>`;
+          } else {
+            const cx = r.cx + pos.xRel, cy = r.y + (pos.yPct / 100) * r.h;
+            currentRegistry[rk] = { src: spec.img(), alt: dev, x: cx - sz.w / 2, y: cy - sz.h / 2, w: sz.w, h: sz.h };
+            svg += `<g data-regkey="${rk}" opacity="${dim}"><image href="${spec.img()}" xlink:href="${spec.img()}" x="${cx - sz.w / 2}" y="${cy - sz.h / 2}" width="${sz.w}" height="${sz.h}"><title>${spec.label}</title></image></g>`;
+          }
         });
       });
+      // Ausstehender erster Tipp einer Zone: kleiner Ring als Hinweis, wo der zweite Tipp hinmuss
+      if(pendingZoneStart && pendingZoneStart.len === len){
+        const cx = r.cx + pendingZoneStart.xRel, cy = r.y + (pendingZoneStart.yPct / 100) * r.h;
+        svg += `<circle cx="${cx}" cy="${cy}" r="7" fill="none" stroke="#5ad2a0" stroke-width="2" stroke-dasharray="3,2"/>`;
+      }
     });
     // Hinweis: Bühnenmitte liegt rechts — deshalb ist "nach rechts" = Richtung Mitte
     svg += `<text x="640" y="30" text-anchor="end" font-size="12" fill="rgba(255,138,61,.9)" font-family="Segoe UI, Arial, sans-serif">Bühnenmitte →</text>`;
@@ -1662,12 +1722,25 @@
     const t = planTrussAt(p);
     if(!t) return;
     const key = String(t.len);
+    const xRel = +(p.x - t.r.cx).toFixed(1);
+    const yPct = +(((p.y - t.r.y) / t.r.h) * 100).toFixed(1);
     MOUNT_PLAN[key] = MOUNT_PLAN[key] || {};
     MOUNT_PLAN[key][planDevice] = MOUNT_PLAN[key][planDevice] || [];
-    MOUNT_PLAN[key][planDevice].push({
-      xRel: +(p.x - t.r.cx).toFixed(1),
-      yPct: +(((p.y - t.r.y) / t.r.h) * 100).toFixed(1),
-    });
+
+    if(ZONE_DEVICES[planDevice]){
+      // Zwei-Tipp-Zone: erster Tipp merkt sich Start (x + y), zweiter Tipp (egal wo genau getippt —
+      // nur die Hoehe zaehlt) legt das Ende fest. x wird vom ERSTEN Tipp uebernommen, damit die Zone
+      // immer eine senkrechte Linie ist.
+      if(!pendingZoneStart || pendingZoneStart.len !== t.len){
+        pendingZoneStart = { len: t.len, xRel, yPct };
+        renderMountPlan();
+        return;
+      }
+      MOUNT_PLAN[key][planDevice].push({ xRel: pendingZoneStart.xRel, yStart: pendingZoneStart.yPct, yEnd: yPct });
+      pendingZoneStart = null;
+    } else {
+      MOUNT_PLAN[key][planDevice].push({ xRel, yPct });
+    }
     saveMountPlan(); renderMountPlan(); updatePlanPanel();
   }
 
@@ -1675,63 +1748,6 @@
     const parts = rk.split(':');           // plan:LEN:DEV:IDX
     const len = parts[1], dev = parts[2], idx = parseInt(parts[3], 10);
     if(MOUNT_PLAN[len] && MOUNT_PLAN[len][dev]) MOUNT_PLAN[len][dev].splice(idx, 1);
-    saveMountPlan(); renderMountPlan(); updatePlanPanel();
-  }
-
-  // "Vermitteln": bringt die gesetzten Plaetze eines Geraets in eine saubere Ordnung, ohne den
-  // Aufbau zu veraendern:
-  //   - senkrecht: gleiche Abstaende von unten nach oben (unterste/oberste Reihe bleiben stehen)
-  //   - waagerecht: alle Lichter einer Spalte bekommen exakt dieselbe x-Position
-  // Lichter, die fast auf gleicher Hoehe sitzen (< ROW_TOL Prozent Unterschied), gelten als EINE
-  // Reihe und bekommen exakt dieselbe Hoehe — damit bleibt ein links/rechts-Paar ein Paar.
-  const ROW_TOL = 5;
-  function regularizePlanList(list){
-    if(!list || list.length < 2) return list;
-    const items = list.slice().sort((a, b) => a.yPct - b.yPct);
-
-    // --- Reihen bilden ---
-    const rows = [[items[0]]];
-    for(let i = 1; i < items.length; i++){
-      const prev = rows[rows.length - 1];
-      const refY = prev.reduce((s, e) => s + e.yPct, 0) / prev.length;
-      if(Math.abs(items[i].yPct - refY) < ROW_TOL) prev.push(items[i]);
-      else rows.push([items[i]]);
-    }
-
-    // --- Hoehen gleichmaessig verteilen ---
-    const firstY = rows[0].reduce((s, e) => s + e.yPct, 0) / rows[0].length;
-    const lastRow = rows[rows.length - 1];
-    const lastY = lastRow.reduce((s, e) => s + e.yPct, 0) / lastRow.length;
-    const stepY = rows.length > 1 ? (lastY - firstY) / (rows.length - 1) : 0;
-    rows.forEach((row, i) => {
-      const y = +(firstY + i * stepY).toFixed(1);
-      row.forEach(e => { e.yPct = y; });
-    });
-
-    // --- Spalten angleichen ---
-    const xs = items.map(e => e.xRel);
-    const mid = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2;
-    const spread = Math.max.apply(null, xs) - Math.min.apply(null, xs);
-    if(spread < 6){                       // faktisch eine Spalte
-      const avg = +(xs.reduce((s, v) => s + v, 0) / xs.length).toFixed(1);
-      items.forEach(e => { e.xRel = avg; });
-    } else {
-      const leftSide = items.filter(e => e.xRel < mid), rightSide = items.filter(e => e.xRel >= mid);
-      [leftSide, rightSide].forEach(grp => {
-        if(!grp.length) return;
-        const avg = +(grp.reduce((s, e) => s + e.xRel, 0) / grp.length).toFixed(1);
-        grp.forEach(e => { e.xRel = avg; });
-      });
-    }
-    return items;
-  }
-
-  function regularizePlan(){
-    Object.keys(MOUNT_PLAN).forEach(len => {
-      Object.keys(MOUNT_PLAN[len] || {}).forEach(dev => {
-        MOUNT_PLAN[len][dev] = regularizePlanList(MOUNT_PLAN[len][dev]);
-      });
-    });
     saveMountPlan(); renderMountPlan(); updatePlanPanel();
   }
 
@@ -1743,6 +1759,7 @@
 
   function clearPlanDevice(){
     Object.keys(MOUNT_PLAN).forEach(len => { if(MOUNT_PLAN[len]) delete MOUNT_PLAN[len][planDevice]; });
+    pendingZoneStart = null;
     saveMountPlan(); renderMountPlan(); updatePlanPanel();
   }
 
@@ -1766,7 +1783,11 @@
         const per = MOUNT_PLAN[String(len)] || {};
         Object.keys(PLAN_DEVICES).forEach(dev => {
           const list = per[dev] || [];
-          if(list.length){ n += list.length; lines.push(String(len).replace('.', ',') + 'm · ' + PLAN_DEVICES[dev].label + ': ' + list.length + (list.length === 1 ? ' Platz' : ' Plätze')); }
+          if(list.length){
+            n += list.length;
+            const einheit = ZONE_DEVICES[dev] ? (list.length === 1 ? ' Bereich' : ' Bereiche') : (list.length === 1 ? ' Platz' : ' Plätze');
+            lines.push(String(len).replace('.', ',') + 'm · ' + PLAN_DEVICES[dev].label + ': ' + list.length + einheit);
+          }
         });
       });
       out.textContent = n
@@ -1939,8 +1960,19 @@
       const len = parts[1], dev = parts[2], idx = parseInt(parts[3], 10);
       const list = (MOUNT_PLAN[len] || {})[dev];
       if(list && list[idx]){
-        list[idx].xRel = +(p.x - dragState.rect.cx).toFixed(1);
-        list[idx].yPct = +(((p.y - dragState.rect.y) / dragState.rect.h) * 100).toFixed(1);
+        const xRel = +(p.x - dragState.rect.cx).toFixed(1);
+        const yPct = +(((p.y - dragState.rect.y) / dragState.rect.h) * 100).toFixed(1);
+        if(list[idx].yStart !== undefined){
+          // Zone: ganze Zone verschieben, Laenge (Abstand Start/Ende) bleibt dabei erhalten —
+          // die Mitte der Zone folgt dem Finger.
+          const span = list[idx].yEnd - list[idx].yStart;
+          list[idx].xRel = xRel;
+          list[idx].yStart = +(yPct - span / 2).toFixed(1);
+          list[idx].yEnd = +(yPct + span / 2).toFixed(1);
+        } else {
+          list[idx].xRel = xRel;
+          list[idx].yPct = yPct;
+        }
         if(dragFrame) return;
         dragFrame = requestAnimationFrame(() => { dragFrame = null; renderMountPlan(); });
       }
@@ -2238,8 +2270,10 @@
       });
 
       // 2) Strobo: die Stufen-Tabelle entscheidet weiterhin, WELCHE Traversen ueberhaupt Strobos
-      // tragen und wie viele (unveraendert) — nur die genaue Position kommt jetzt aus dem
-      // Montage-Plan (von unten nach oben) und wird gegen bereits belegte Flaechen geprueft.
+      // tragen und wie viele (unveraendert) — die genaue Position kommt jetzt aus den Montage-Plan-
+      // ZONEN: zonePoints() verteilt die benoetigte Anzahl gleichmaessig innerhalb der Zone, neu
+      // berechnet bei jeder Stueckzahl. Kandidaten werden zusaetzlich noch gegen bereits belegte
+      // Flaechen (Wallwasher) geprueft.
       const strobeCountByLen = {};
       Object.keys(poleStrobes).forEach(key => {
         const len = parseFloat(key.split('-')[1]);
@@ -2249,23 +2283,24 @@
       activeLens.forEach(len => {
         strobePtsByLen[len] = [];
         const need = strobeCountByLen[len] || 0;
-        if(!need) return;
-        const all = (MOUNT_PLAN[String(len)] || {}).strobe || [];
+        if(!need || rankByLen[len] === undefined) return;
         const geo = poleGeometry(len, rankByLen[len]);
         const sz = { w: SIZE.strobeSmall.w * geo.k, h: SIZE.strobeSmall.h * geo.k };
-        for(let i = 0; i < all.length && strobePtsByLen[len].length < need; i++){
-          const okL = placeIfFree('left', len, all[i], sz);
-          const okR = placeIfFree('right', len, all[i], sz);
-          if(okL && okR) strobePtsByLen[len].push(all[i]);
+        const candidates = zonePoints(len, 'strobe', need, geo.trussH, sz.h);
+        candidates.forEach(pt => {
+          const okL = placeIfFree('left', len, pt, sz);
+          const okR = placeIfFree('right', len, pt, sz);
+          if(okL && okR) strobePtsByLen[len].push(pt);
           else { if(okL) placed.left.pop(); if(okR) placed.right.pop(); } // nur symmetrisch uebernehmen
-        }
+        });
       });
 
-      // 3) Parstrahler: Fuss-Position zuerst (1 pro Turm), danach haengende Positionen RUNDENWEISE
-      // ueber ALLE aktiven Traversenlaengen verteilt (0,5 -> 1 -> 1,5 -> 0,5 -> ...) — dadurch teilt
-      // sich die Anordnung ueber die ganze Konstruktion auf, statt eine Laenge komplett zu fuellen.
-      // Kollidiert ein Punkt mit einer bereits belegten Flaeche (Wallwasher/Strobo/eigener Fuss/
-      // Nachbarturm), wird er uebersprungen.
+      // 3) Parstrahler: Fuss-Position zuerst (1 pro Turm, unveraendert Einzelpunkt — davon gibt es
+      // immer nur genau einen). Danach haengende Positionen aus den Montage-Plan-ZONEN: pro aktiver
+      // Traversenlaenge wird RUNDENWEISE (0,5 -> 1 -> 1,5 -> 0,5 -> ...) je EIN Platz vorgesehen, bis
+      // entweder das Budget oder die Zonen-Kapazitaet erschoepft ist — dadurch teilt sich die
+      // Anordnung ueber die ganze Konstruktion auf, statt eine Laenge komplett zu fuellen. Strobo hat
+      // an dieser Traverse Vorrang und "kostet" dort jeweils einen Platz (siehe frontCapByLen).
       const footPtByPole = {};
       activePoles.forEach(p => {
         if(remainingA <= 0 || rankByLen[p.len] === undefined) return;
@@ -2277,32 +2312,50 @@
         footPtByPole[`${p.side}-${p.len}`] = foot;
         remainingA--;
       });
-      const frontPtsByLen = {};
-      activeLens.forEach(len => { frontPtsByLen[len] = []; });
-      // WICHTIG: eine Runde, in der (fuer alle Laengen) genau der unterste Punkt am eigenen
-      // Fuss-Strahler abprallt, darf die Schleife NICHT beenden — hoehere Runden (weiter oben auf
-      // der Traverse) haben damit noch nichts zu tun und koennen trotzdem noch passen. Deshalb wird
-      // weitergezaehlt, solange irgendeine Laenge ueberhaupt noch unbesuchte Punkte hat.
-      const maxFrontLen = Math.max(0, ...activeLens.map(len => ((MOUNT_PLAN[String(len)] || {}).strahlerFront || []).length));
-      for(let round = 0; round < maxFrontLen && remainingA >= 2; round++){
-        for(const len of activeLens){
-          if(remainingA < 2) continue;
-          const all = (MOUNT_PLAN[String(len)] || {}).strahlerFront || [];
-          if(round >= all.length) continue;
-          const pt = all[round];
-          const geo = poleGeometry(len, rankByLen[len]);
-          const sz = { w: SIZE.lichtAFront.w * geo.k, h: SIZE.lichtAFront.h * geo.k };
-          const okL = placeIfFree('left', len, pt, sz);
-          const okR = placeIfFree('right', len, pt, sz);
-          if(okL && okR){
-            frontPtsByLen[len].push(pt);
-            remainingA -= 2;
-          } else {
-            if(okL) placed.left.pop();
-            if(okR) placed.right.pop();
+
+      const frontCapByLen = {};
+      activeLens.forEach(len => {
+        if(rankByLen[len] === undefined){ frontCapByLen[len] = 0; return; }
+        const geo = poleGeometry(len, rankByLen[len]);
+        const devH = SIZE.lichtAFront.h * geo.k;
+        const zones = (MOUNT_PLAN[String(len)] || {}).strahlerFront || [];
+        const totalCap = zones.reduce((s, z) => s + zoneCapacity(z, geo.trussH, devH), 0);
+        frontCapByLen[len] = Math.max(0, totalCap - (strobeCountByLen[len] || 0));
+      });
+      const frontCountByLen = {};
+      activeLens.forEach(len => { frontCountByLen[len] = 0; });
+      {
+        let budget = remainingA, progress = true;
+        while(budget >= 2 && progress){
+          progress = false;
+          for(const len of activeLens){
+            if(budget < 2 || frontCountByLen[len] >= frontCapByLen[len]) continue;
+            frontCountByLen[len]++; budget -= 2; progress = true;
           }
         }
       }
+
+      // Tatsaechliche Positionen: gleichmaessig innerhalb der Zonen (neu berechnet je Stueckzahl),
+      // zusaetzlich noch einmal gegen Wallwasher/Strobo/Nachbarturm geprueft (Restfaelle, in denen
+      // eine Zone geometrisch doch noch anecken wuerde). remainingA wird erst HIER anhand der
+      // tatsaechlich platzierten Anzahl verringert, damit die Mengenbilanz auch in diesen seltenen
+      // Randfaellen exakt bleibt.
+      const frontPtsByLen = {};
+      activeLens.forEach(len => {
+        frontPtsByLen[len] = [];
+        const need = frontCountByLen[len];
+        if(!need || rankByLen[len] === undefined) return;
+        const geo = poleGeometry(len, rankByLen[len]);
+        const sz = { w: SIZE.lichtAFront.w * geo.k, h: SIZE.lichtAFront.h * geo.k };
+        const candidates = zonePoints(len, 'strahlerFront', need, geo.trussH, sz.h);
+        candidates.forEach(pt => {
+          const okL = placeIfFree('left', len, pt, sz);
+          const okR = placeIfFree('right', len, pt, sz);
+          if(okL && okR) frontPtsByLen[len].push(pt);
+          else { if(okL) placed.left.pop(); if(okR) placed.right.pop(); }
+        });
+      });
+      activeLens.forEach(len => { remainingA -= frontPtsByLen[len].length * 2; });
 
       // Echte Moving Heads werden nach Rang vergeben — nur Pfosten, die auch in headKeys stehen.
       // X-Position: pro Seite so, dass die innerste Position (Richtung Pult) der feste Anker ist —
